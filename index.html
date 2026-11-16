@@ -329,7 +329,7 @@ function mtCacUse(bakedCac) { return (MT_LIVE_CAC && MT_LIVE_CAC.cac) ? MT_LIVE_
 function mtLtvCac(ltv, bakedLtvCac) { const c = MT_LIVE_CAC && MT_LIVE_CAC.cac; return (ltv != null && c) ? ltv / c : bakedLtvCac; }
 // payback = CAC ÷ monthly margin per account (ARPA/12 × margin); recomputed on the live CAC when present
 function mtPayback(o) { if (!o) return null; const c = MT_LIVE_CAC && MT_LIVE_CAC.cac; const mm = (o.arpa != null && o.margin != null) ? o.arpa / 12 * o.margin : null; return (c && mm) ? c / mm : o.payback; }
-const mtCacTag = () => (typeof MT_CAC_SRC !== 'undefined' && MT_CAC_SRC === 'live') ? ' <span class="tag">live CAC</span>' : '';
+const mtCacTag = () => (typeof MT_CAC_SRC !== 'undefined' && MT_CAC_SRC === 'sheet') ? ' <span class="tag">CAC sheet</span>' : '';
 /* Adjustment indicator (USD, per 2026 month) from the monthly data pack: indicator = PnL Sales − ROAS ladder billing − ROAS spotted in merchant tracking = commission/legacy revenue in the P&L. Interim bake — to move into the pipeline. */
 let MT_ADJ = {"m":["01","02","03","04","05","06","07","08"],"pnl":[323789,362858,579913,330345,426051,314421,345088,401593],"billing":[4000,7020,7150,1144,8000,7000,20169,18500],"spotted":[539,877,5498,1699,5583,2961,2605,4472],"adj":[-2511,3061,3276,-3906,5276,1154,21756,117588],"ind":[319250,354960,567265,327502,412468,304460,322314,378621]};
 const mtKey = s => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -640,11 +640,25 @@ function sec(label, n) { return `<tr class="sec"><td colspan="${n + 1}">${label}
 const MT_RULES = {
   hm_exclude: ['Touche Prive'],
   refunds: { 'Pure N Bio': { first_paid: '2026-04', refund_month: '2026-09' }, 'Alma Home': { first_paid: '2026-07', refund_month: '2026-10' } },   // manual until the ladder carries refund months
-  spend: { '2026-09': { usd: 13206, src: 'Kareem, 16 Nov 2026' } },   // HeyMoon.ai acquisition spend missing from the data pack
   cash: { as_of: '31 Oct 2026', balance_usd: 208034, monthly_burn_usd: 38279, src: 'Investor Metrics v7.1; to be linked' }
 };
 const MT_ACT = ['New', 'Existing', 'Reactivated'];
-let MT_GAPS = []; const MT_SPEND_MISSING = new Set();           // data gaps found on load (Control page)
+let MT_GAPS = [];
+let MT_CAC_SHEET = null;    // live CAC sheet, the source of truth for acquisition spend: { ok, spend: {'YYYY-MM': usd}, count: {'YYYY-MM': new clients}, err }
+/* Plan (agreed 16 Nov 2026, option B): Investor Metrics v7.1 method, calculated on the dashboard's own actuals (Jetour included).
+   Remaining 2026 quarters: revenue = previous quarter × NRR (average of the last two quarterly NRRs) + new brands × first-quarter revenue per new brand;
+   new brands grow at the last quarter-on-quarter rate unless set below. 2027–2030 inputs from v7.1 (management targets). Edit here to revise. */
+const MT_PLAN = {
+  source: 'Investor Metrics v7.1 method, calculated on dashboard actuals',
+  q_new_brands: null,          // e.g. { 'Q4-26': 25 } to override the growth rule for a quarter
+  margin: 0.5, payback_months: 6,
+  years: { 2027: { new: 300, churn: 0.2, arpa: 10000 }, 2028: { new: 850, churn: 0.2, arpa: 14000 }, 2029: { new: 1650, churn: 0.2, arpa: 19000 }, 2030: { new: 2600, churn: 0.2, arpa: 24000 } }
+};
+const mtSheetSpend = ms => { if (!MT_CAC_SHEET || !MT_CAC_SHEET.ok || !ms.length) return null; let s = 0; for (const m of ms) { const v = MT_CAC_SHEET.spend[m]; if (v == null) return null; s += v; } return s; };
+const mtSheetCount = ms => { if (!MT_CAC_SHEET || !MT_CAC_SHEET.ok || !ms.length) return null; let s = 0; for (const m of ms) { const v = MT_CAC_SHEET.count[m]; if (v == null) return null; s += v; } return s; };
+const mtMonthsOf = (m0, m1) => { const o = []; if (!S) return o; for (let k = S.months.indexOf(m0); k >= 0 && k <= S.months.indexOf(m1); k++) o.push(S.months[k]); return o; };
+const mtHmFirstPaidIn = ms => mtHM().filter(b => ms.includes(b.since)).length;
+const mtPeriodCac = p => { const ms = mtMonthsOf(p.start, p.end); const spend = mtSheetSpend(ms), n = mtHmFirstPaidIn(ms); return { spend, n, cac: (spend != null && n) ? spend / n : null }; };           // data gaps found on load (Control page)
 let MT_CAC_SRC = 'model';   // 'model' = spend since launch ÷ brands that have paid; 'live' = CAC sheet fallback when model spend is incomplete
 const mtIsHM = b => !MT_RULES.hm_exclude.includes(b.name);
 const mtHM = () => (D && D.roas_brands ? D.roas_brands.filter(mtIsHM) : []);
@@ -658,8 +672,11 @@ function mtApplyRules() {
   const once = (o, f) => { if (!o || o.__mtRules) return; Object.defineProperty(o, '__mtRules', { value: true, enumerable: false }); f(); };
   const excl = (D.roas_brands || []).filter(b => !mtIsHM(b));
   once(S, () => {
-    (S.cac_merchant_spend || []).forEach((v, k) => { if (v == null) MT_SPEND_MISSING.add(S.months[k]); });
-    Object.entries(MT_RULES.spend).forEach(([m, v]) => { const k = S.months.indexOf(m); if (k >= 0 && S.cac_merchant_spend && S.cac_merchant_spend[k] == null) S.cac_merchant_spend[k] = v.usd; });
+    // excluded brands' revenue moves from HeyMoon.ai to Other pricing (blended totals unchanged)
+    excl.forEach(b => (b.monthly || []).forEach((v, k) => { if (!v || k >= S.months.length) return;
+      if (S.rev_roas) S.rev_roas[k] -= v; if (S.rev_roas_ext && S.rev_roas_ext[k] != null) S.rev_roas_ext[k] -= v; if (S.rev_other) S.rev_other[k] = (S.rev_other[k] || 0) + v;
+      const t = (b.tier_monthly || [])[k]; if (S.rev_roas_tier && S.rev_roas_tier[t]) S.rev_roas_tier[t][k] -= v;
+      if (S.rev_roas_lvl && S.rev_roas_lvl[b.lvl_group]) S.rev_roas_lvl[b.lvl_group][k] -= v; }));
     excl.forEach(b => (b.status_monthly || []).forEach((st, k) => { if (!MT_ACT.includes(st)) return;
       ['act_roas', 'act_total'].forEach(key => { if (S[key] && S[key][k] != null) S[key][k]--; });
       const t = (b.tier_monthly || [])[k]; if (S.act_roas_tier && S.act_roas_tier[t] && S.act_roas_tier[t][k] != null) S.act_roas_tier[t][k]--;
@@ -667,26 +684,39 @@ function mtApplyRules() {
   });
   once(P, () => Object.keys(P).forEach(key => { const p = P[key]; if (!p || !p.start) return;
     const k0 = S.months.indexOf(p.start), k1 = S.months.indexOf(p.end); if (k0 < 0 || k1 < 0) return;
+    excl.forEach(b => { let r = 0; for (let k = k0; k <= k1; k++) r += (b.monthly[k] || 0); if (r && p.rev) { p.rev.roas -= r; p.rev.other = (p.rev.other || 0) + r;
+      for (let k = k0; k <= k1; k++) { const v = b.monthly[k] || 0; if (!v) continue; const t = (b.tier_monthly || [])[k]; if (p.rev.roas_tier && p.rev.roas_tier[t] != null) p.rev.roas_tier[t] -= v; if (p.rev.roas_lvl && p.rev.roas_lvl[b.lvl_group] != null) p.rev.roas_lvl[b.lvl_group] -= v; } } });
     excl.forEach(b => { const st = (b.status_monthly || [])[k1];
       if (MT_ACT.includes(st) && p.active_end) { p.active_end.roas--; p.active_end.total--; const t = (b.tier_monthly || [])[k1]; if (p.active_end.roas_tier && p.active_end.roas_tier[t] != null) p.active_end.roas_tier[t]--; if (p.active_end.roas_lvl && p.active_end.roas_lvl[b.lvl_group] != null) p.active_end.roas_lvl[b.lvl_group]--; }
       const sk = mtSinceK(b), ck = (b.status_monthly || []).indexOf('Churned');
-      if (p.events && sk >= k0 && sk <= k1) { p.events.roas_signed--; if (p.cac && p.cac.new_brands) p.cac.new_brands--; }
+      if (p.events && sk >= k0 && sk <= k1) { p.events.roas_signed--; }
       if (p.events && ck >= k0 && ck <= k1) p.events.roas_churn--; });
-    if (p.cac) { Object.entries(MT_RULES.spend).forEach(([m, v]) => { const k = S.months.indexOf(m); if (k >= k0 && k <= k1 && !p.cac.complete && !p.cac.__mtSpend) { p.cac.spend = (p.cac.spend || 0) + v.usd; Object.defineProperty(p.cac, '__mtSpend', { value: true, enumerable: false }); } });
-      let full = true; for (let k = k0; k <= k1; k++) if (S.cac_merchant_spend[k] == null) full = false;
-      if (full) { p.cac.complete = true; p.cac.cac = p.cac.new_brands ? p.cac.spend / p.cac.new_brands : null; } } }));
+  }));
+  // HeyMoon.ai ARR = last 3 months × 4 from the brand data (excluded brands out)
+  once(S.arr_roas, () => { const nm = mtHM(); for (let k = 0; k < S.months.length; k++) { if (S.arr_roas[k] == null) continue; let r = 0; for (let j = Math.max(0, k - 2); j <= k; j++) nm.forEach(b => r += (b.monthly[j] || 0)); const d = S.arr_roas[k] - r * 4; if (Math.abs(d) > 0.5) { S.arr_roas[k] -= d; Object.keys(P).forEach(key => { const pm = P[key]; if (pm && pm.end === S.months[k] && pm.arr && !pm.arr.__mtArr) { pm.arr.roas -= d; Object.defineProperty(pm.arr, '__mtArr', { value: true, enumerable: false }); } }); } } });
   // data gaps (Control page)
   const gaps = [];
-  const launchK = mtMonthK(((M.config || {}).roas_status || {}).launch_month || '2025-11'), Lk = S.months.length - 1;
-  for (let k = Math.max(0, launchK); k <= Lk; k++) { const m = S.months[k]; const ov = MT_RULES.spend[m];
-    if (MT_SPEND_MISSING.has(m)) gaps.push(ov ? { level: 'warn', title: 'HeyMoon.ai acquisition spend ' + fmt.month(m), detail: 'Missing from the data pack; using ' + fmt.moneyFull(ov.usd) + ' entered manually (' + ov.src + '). Add it to the CAC sheet / Monthly Model.' }
-                                  : { level: 'bad', title: 'HeyMoon.ai acquisition spend ' + fmt.month(m), detail: 'Missing from the data pack. CAC, payback and LTV/CAC fall back to the live CAC sheet or show —.' }); }
   Object.entries(MT_RULES.refunds).forEach(([n, r]) => gaps.push({ level: 'warn', title: 'Refund month · ' + n, detail: 'Paid ' + fmt.month(r.first_paid) + ', refunded and counted as churned ' + fmt.month(r.refund_month) + '. Entered manually; the monthly ladder should carry refund months.' }));
   gaps.push({ level: 'warn', title: 'Cash and burn', detail: 'Cash ' + fmt.moneyFull(MT_RULES.cash.balance_usd) + ' and burn ' + fmt.moneyFull(MT_RULES.cash.monthly_burn_usd) + '/month as at ' + MT_RULES.cash.as_of + ', entered manually (' + MT_RULES.cash.src + ').' });
-  gaps.push({ level: 'warn', title: 'YE 2026 and 2030 plan', detail: 'Waiting for the updated Investor Metrics file (Jetour included everywhere).' });
-  gaps.push({ level: 'warn', title: 'Build engine rules', detail: 'The 16 Nov definitions (first-payment brands, refunds, Touche Prive, ARPA on average active, quarterly NRR) are applied in this page. The build engine must adopt them before the next build.' });
+  gaps.push({ level: 'warn', title: 'YE 2026 and 2030 plan', detail: 'Calculated on dashboard actuals with the v7.1 method; 2027–2030 inputs from Investor Metrics v7.1. Update the inputs in the page (MT_PLAN) if the targets are revised.' });
+  gaps.push({ level: 'warn', title: 'Touche Prive', detail: 'Nov-25 pre-launch test: excluded from HeyMoon.ai brand counts, unit economics and revenue; its revenue shows under Other pricing.' });
+  gaps.push({ level: 'warn', title: 'Build engine rules', detail: 'The 16 Nov definitions (first-payment brands, refunds, Touche Prive, ARPA on average active, quarterly NRR, CAC from the CAC sheet, plan) are applied in this page. The build engine must adopt them before the next build.' });
   MT_GAPS = gaps;
 }
+function mtCacStatus() {
+  if (!S) return null; const Lk = S.months.length - 1, launchK = Math.max(0, mtMonthK(((M.config || {}).roas_status || {}).launch_month || '2025-11'));
+  const ms = []; for (let k = launchK; k <= Lk; k++) ms.push(S.months[k]);
+  if (!MT_CAC_SHEET) return { state: 'loading', ms }; if (!MT_CAC_SHEET.ok) return { state: 'down', ms, err: MT_CAC_SHEET.err };
+  const missing = ms.filter(m => MT_CAC_SHEET.spend[m] == null);
+  const diffs = ms.map(m => ({ m, ours: mtHmFirstPaidIn([m]), sheet: MT_CAC_SHEET.count[m] })).filter(d => d.sheet == null || Math.round(d.sheet) !== d.ours);
+  return { state: missing.length ? 'gaps' : 'ok', ms, missing, diffs, ours: mtHmFirstPaidIn(ms), sheet: mtSheetCount(ms) };
+}
+function mtCacGaps() { const c = mtCacStatus(); if (!c) return []; const g = [];
+  if (c.state === 'loading') g.push({ level: 'warn', title: 'CAC sheet', detail: 'Loading the live CAC sheet (source of truth for acquisition spend).' });
+  else if (c.state === 'down') g.push({ level: 'bad', title: 'CAC sheet unreachable', detail: 'CAC, LTV/CAC and payback show — until the sheet loads (' + (c.err || 'error') + ').' });
+  else { if (c.missing.length) g.push({ level: 'bad', title: 'Acquisition spend missing in the CAC sheet', detail: c.missing.map(fmt.month).join(', ') + ': CAC needs every month from launch (' + fmt.month(c.ms[0]) + ') to the update month. CAC, LTV/CAC and payback show —.' });
+    if (c.diffs.length) g.push({ level: 'bad', title: 'CAC sheet brand count differs from the dashboard', detail: 'Sheet "New Clients" vs HeyMoon.ai brands first paid: ' + c.diffs.map(d => fmt.month(d.m) + ' ' + (d.sheet == null ? '—' : fmt.int(d.sheet)) + ' vs ' + d.ours).join(' · ') + '. Total since launch: sheet ' + (c.sheet == null ? '—' : fmt.int(c.sheet)) + ' vs dashboard ' + c.ours + '. CAC uses the dashboard count.' }); }
+  return g; }
 const mtRenameRx = [[/\bNew Model\b/g, 'HeyMoon.ai'], [/\bROAS\b(?!(?:-\s?|\s)?(?:[Ll]adder|[Ll]evels?\b|[Ff]actor|[Tt]arget|[Mm]ilestone|[Tt]racker|billing|invoice|spend|priced|-))/g, 'HeyMoon.ai']];
 function mtRenameText(s) { let o = s; mtRenameRx.forEach(([rx, to]) => { o = o.replace(rx, to); }); return o; }
 function mtRenameNode(root) {
@@ -754,13 +784,15 @@ function computeInvestor() {
   const nmUp = upgrade(cur3[0], Lk), nmUpPrev = upgrade(prev3[0], prev3[2]);
   // CAC: spend since launch ÷ brands that have paid; quarter CAC = window spend ÷ brands signed in window
   const spendK = ks => sum(ks.map(k => S.cac_merchant_spend[k] || 0));
+  // CAC: CAC sheet spend (source of truth) since launch, incl. pre-launch months ÷ the dashboard's count of HeyMoon.ai brands that have paid; no fallback
   const launchK = mtMonthK(((M.config || {}).roas_status || {}).launch_month || '2025-11');
-  const spendOk = ks => ks.every(k => S.cac_merchant_spend[k] != null);
-  const slK = win(Math.max(0, launchK), Lk), spendSL = spendOk(slK) ? spendK(slK) : null;
-  const cacModel = (spendSL != null && nmPaid) ? spendSL / nmPaid : null;   // spend since launch (incl. pre-launch Nov–Dec 25) ÷ HeyMoon.ai brands that have paid
-  const cacSL = cacModel != null ? cacModel : ((MT_LIVE_CAC && MT_LIVE_CAC.cac) ? MT_LIVE_CAC.cac : null);
-  MT_CAC_SRC = cacModel != null ? 'model' : ((MT_LIVE_CAC && MT_LIVE_CAC.cac) ? 'live' : 'none');
-  const cacCur = (nmSignedCur && spendOk(cur3)) ? spendK(cur3) / nmSignedCur : null, cacPrev = (nmSignedPrev && spendOk(prev3)) ? spendK(prev3) / nmSignedPrev : null;
+  const mOf = ks => ks.map(k => S.months[k]);
+  const slK = win(Math.max(0, launchK), Lk), spendSL = mtSheetSpend(mOf(slK));
+  const cacModel = (spendSL != null && nmPaid) ? spendSL / nmPaid : null;
+  const cacSL = cacModel;
+  MT_CAC_SRC = cacModel != null ? 'sheet' : 'none';
+  const spendOk = ks => mtSheetSpend(mOf(ks)) != null;
+  const cacCur = (nmSignedCur && spendOk(cur3)) ? mtSheetSpend(mOf(cur3)) / nmSignedCur : null, cacPrev = (nmSignedPrev && spendOk(prev3)) ? mtSheetSpend(mOf(prev3)) / nmSignedPrev : null;
   const AR = arpaAt(Lk, cacSL) || { n: {}, arr: {}, act: {} }, ARp3 = arpaAt(Lk - 3, cacSL) || {}, ARp12 = arpaAt(Lk - 12, cacSL) || {};
   const nmArpa = AR.ROAS != null ? AR.ROAS : null, nmArpaPrev = ARp3.ROAS != null ? ARp3.ROAS : null;   // ARR ÷ average active brands over the same 3 months
   const nmLtv = (nmArpa != null && nmLogoChurn) ? nmArpa * NM_MARGIN / nmLogoChurn : null;
@@ -792,7 +824,38 @@ function computeInvestor() {
   const proForma = cashBal != null ? cashBal + (cashFund || 0) : null;
   const runway = (proForma != null && burn) ? proForma / burn : null;
 
-  return { AR, ARp3, ARp12, qEnd, qCur, qPrev, qPrev2, qLab, nmMigrated, spendSL, cacModel, launchK, spendOk, ttm, ytd, latest, sl, ttmPrev, ytdPrev, money, pct0, pct1, ACTIVE, NM_MARGIN, BLENDED_CHURN, sum, win, cur3, prev3, ytdK, ytdPrevK, g, pts, nm, nmRev, sinceK, churnK, paidBy, churnedBy, activeAt, nmArrCur, nmArrPrev, nmActive, nmActivePrev, nmSigned, nmSignedCur, nmSignedPrev, monthsYtd, nmChurned, nmPaid, nmLogoChurn, nmLogoChurnPrev, nmRet, nmNrr, nmNrrPrev, upgrade, nmUp, nmUpPrev, spendK, cacSL, cacCur, cacPrev, nmArpa, nmArpaPrev, nmLtv, nmLtvPrev, nmLtvCac, nmPayback, nmPaybackPrev, blArr, blArrPrev, blActive, blActivePrev, blArpa, blArpaPrev, margin, marginPrev, blLtv, blLtvPrev, blLtvCac, legNewPrev, repeat, repNow, repPrev, nrr, nrrPrev, top1, top1Prev, cash, cashNum, cashBal, cashFund, burn, proForma, runway };
+  // ---- Plan (option B): YE of the update year from actuals, then 2027–2030 inputs
+  const plan = (() => {
+    const yr = +S.months[qEnd].slice(0, 4), q = Math.floor((+S.months[qEnd].slice(5, 7) - 1) / 3) + 1;
+    const qKs = (y, qq) => { const k0 = mtMonthK(y + '-' + String((qq - 1) * 3 + 1).padStart(2, '0')); return [k0, k0 + 1, k0 + 2]; };
+    const firstIn = ks => nm.filter(br => ks.includes(sinceK(br)));
+    const newCur = firstIn(qCur).length, newPrev = firstIn(qPrev).length;
+    const nrrAvg = (nmNrr && nmNrrPrev) ? (nmNrr.nrr + nmNrrPrev.nrr) / 2 : (nmNrr ? nmNrr.nrr : null);
+    const revCur = nmRev(qCur), revNewCur = sum(firstIn(qCur).map(br => sum(qCur.map(k => br.monthly[k] || 0))));
+    const firstQRev = newCur ? revNewCur / newCur : null, growth = newPrev ? newCur / newPrev : null;
+    const cacQ = (newCur && spendOk(qCur)) ? mtSheetSpend(mOf(qCur)) / newCur : null;
+    const quarters = []; let rev = revCur, nNew = newCur;
+    for (let qq = q + 1; qq <= 4; qq++) { const lab = 'Q' + qq + '-' + String(yr).slice(2); const ov = MT_PLAN.q_new_brands && MT_PLAN.q_new_brands[lab];
+      nNew = ov != null ? ov : (growth != null ? Math.round(nNew * growth) : 0); rev = (nrrAvg != null && firstQRev != null) ? rev * nrrAvg + nNew * firstQRev : null; quarters.push({ lab, newBrands: nNew, rev, override: ov != null }); }
+    const projNew = sum(quarters.map(x => x.newBrands)), lastRev = quarters.length ? quarters[quarters.length - 1].rev : revCur;
+    const ytdActual = nmRev(win(mtMonthK(yr + '-01'), qEnd));
+    const paidQ = paidBy(qEnd).length, cum = paidQ + projNew, churn = nmLogoChurn;
+    const signedYear = nm.filter(br => sinceK(br) >= mtMonthK(yr + '-01') && sinceK(br) <= qEnd).length + projNew;
+    const ye = { arr: lastRev != null ? lastRev * 4 : null, ytd: lastRev != null ? ytdActual + sum(quarters.map(x => x.rev)) : null, signed: signedYear, cum, active: churn != null ? cum * (1 - churn) : null, churn, nrr: nrrAvg, upgrade: nmUp, margin: MT_PLAN.margin };
+    const spQ = mtSheetSpend(mOf(win(Math.max(0, launchK), qEnd)));
+    ye.cac = (spQ != null && cacQ != null && cum) ? (spQ + projNew * cacQ) / cum : null;
+    ye.arpa = (ye.arr != null && ye.active) ? ye.arr / ye.active : null; ye.ltv = (ye.arpa != null && churn) ? ye.arpa * MT_PLAN.margin / churn : null;
+    ye.ltvcac = (ye.ltv != null && ye.cac) ? ye.ltv / ye.cac : null; ye.payback = (ye.cac && ye.arpa) ? ye.cac / (ye.arpa * MT_PLAN.margin / 12) : null;
+    const path = [{ year: yr, ye: true, new: signedYear, churn, active: ye.active, arpa: ye.arpa, arr: ye.arr, cac: ye.cac, spend: null, cum }];
+    let act = ye.active, cumB = cum;
+    Object.keys(MT_PLAN.years).map(Number).filter(y => y > yr).sort().forEach(y => { const i = MT_PLAN.years[y];
+      act = act != null ? act * (1 - i.churn) + i.new * (1 - i.churn / 2) : null; cumB += i.new; const cac = i.arpa * MT_PLAN.margin / 12 * MT_PLAN.payback_months;
+      path.push({ year: y, new: i.new, churn: i.churn, active: act, arpa: i.arpa, arr: act != null ? act * i.arpa : null, cac, spend: i.new * cac, cum: cumB }); });
+    const y5 = path[path.length - 1]; const t = { arr: y5.arr, active: y5.active, cum: y5.cum, churn: y5.churn, arpa: y5.arpa, cac: y5.cac, ltv: y5.arpa * MT_PLAN.margin / y5.churn, margin: MT_PLAN.margin, payback: MT_PLAN.payback_months, year: y5.year };
+    t.ltvcac = t.ltv / t.cac;
+    return { yr, ye, y5: t, path, quarters, drivers: { qLabCur: qLab(qCur), qLabPrev: qLab(qPrev), nrrCur: nmNrr && nmNrr.nrr, nrrPrev: nmNrrPrev && nmNrrPrev.nrr, nrrAvg, newCur, newPrev, growth, revCur, revNewCur, firstQRev, cacQ, paidQ, projNew, ytdActual, churn } };
+  })();
+  return { plan, AR, ARp3, ARp12, qEnd, qCur, qPrev, qPrev2, qLab, nmMigrated, spendSL, cacModel, launchK, spendOk, ttm, ytd, latest, sl, ttmPrev, ytdPrev, money, pct0, pct1, ACTIVE, NM_MARGIN, BLENDED_CHURN, sum, win, cur3, prev3, ytdK, ytdPrevK, g, pts, nm, nmRev, sinceK, churnK, paidBy, churnedBy, activeAt, nmArrCur, nmArrPrev, nmActive, nmActivePrev, nmSigned, nmSignedCur, nmSignedPrev, monthsYtd, nmChurned, nmPaid, nmLogoChurn, nmLogoChurnPrev, nmRet, nmNrr, nmNrrPrev, upgrade, nmUp, nmUpPrev, spendK, cacSL, cacCur, cacPrev, nmArpa, nmArpaPrev, nmLtv, nmLtvPrev, nmLtvCac, nmPayback, nmPaybackPrev, blArr, blArrPrev, blActive, blActivePrev, blArpa, blArpaPrev, margin, marginPrev, blLtv, blLtvPrev, blLtvCac, legNewPrev, repeat, repNow, repPrev, nrr, nrrPrev, top1, top1Prev, cash, cashNum, cashBal, cashFund, burn, proForma, runway };
 }
 
 /* ---- ARPA: one definition across the model (agreed 16 Nov 2026).
@@ -825,14 +888,19 @@ function renderInvestor() {
   const gc = (v, kind, lowerBetter) => { if (v == null) return '<td class="na">—</td>'; const good = lowerBetter ? v <= 0 : v >= 0; const txt = kind === 'pts' ? (v * 100 >= 0 ? '+' : '') + (v * 100).toFixed(1) + ' pts' : fmt.pctS(v); return `<td class="${good ? 'pos' : 'neg'}">${txt}</td>`; };
   const na = '<td class="na">n/a</td>';
   const LOWER = /churn|^CAC|Payback|Top client|burn/i;
-  const R = (metric, blv, blg, blKind, nmv, nmg, nmKind, def, fm = money) => { const lb = LOWER.test(metric.replace(/<[^>]+>/g, '')); return `<tr><td>${metric}</td>${blv === 'na' ? na : td(blv, fm)}${blv === 'na' ? na : gc(blg, blKind, lb)}${nmv === 'na' ? na : td(nmv, fm)}${nmv === 'na' ? na : gc(nmg, nmKind, lb)}<td class="muted small" style="text-align:left;white-space:normal;min-width:260px">${def}</td></tr>`; };
-  const S6 = label => `<tr class="sec"><td colspan="6">${label}</td></tr>`;
+  const PL = I.plan, pye = PL.ye, py5 = PL.y5, pc = '<td class="na">n/a</td>';
+  const PLAN = { 'ARR': [pye.arr, py5.arr], 'YTD revenue': [pye.ytd, null], 'Active brands': [pye.active, py5.active, fmt.int], 'New brands signed': [pye.signed, py5.cum, fmt.int],
+    'Upgrade rate': [pye.upgrade, null, pct0], 'Gross logo churn': [pye.churn, py5.churn, pct0], 'Gross logo retention': [pye.churn != null ? 1 - pye.churn : null, 1 - py5.churn, pct0],
+    'Net revenue retention': [pye.nrr, null, pct0], 'CAC': [pye.cac, py5.cac], 'ARPA': [pye.arpa, py5.arpa], 'LTV': [pye.ltv, py5.ltv], 'LTV / CAC': [pye.ltvcac, py5.ltvcac, fmt.x], 'Payback': [pye.payback, py5.payback, fmt.mo], 'Margin': [pye.margin, py5.margin, pct0] };
+  const planTds = metric => { const k = metric.split('<')[0].trim(); const e = PLAN[k]; if (!e) return pc + pc; const f = e[2] || money; return `<td class="plan">${e[0] == null ? '—' : f(e[0])}</td><td class="plan">${e[1] == null ? 'n/a' : f(e[1])}</td>`; };
+  const R = (metric, blv, blg, blKind, nmv, nmg, nmKind, def, fm = money) => { const lb = LOWER.test(metric.replace(/<[^>]+>/g, '')); return `<tr><td>${metric}</td>${blv === 'na' ? na : td(blv, fm)}${blv === 'na' ? na : gc(blg, blKind, lb)}${nmv === 'na' ? na : td(nmv, fm)}${nmv === 'na' ? na : gc(nmg, nmKind, lb)}${planTds(metric)}<td class="muted small" style="text-align:left;white-space:normal;min-width:260px">${def}</td></tr>`; };
+  const S6 = label => `<tr class="sec"><td colspan="8">${label}</td></tr>`;
   const asOf = fmt.month(Lm), q = fmt.month(S.months[cur3[0]]) + '–' + asOf, qp = fmt.month(S.months[prev3[0]]) + '–' + fmt.month(S.months[prev3[2]]);
   const { AR, ARp3, ARp12, qCur, qPrev, qPrev2, qLab, nmMigrated, spendSL, cacModel } = I;
   const qN = qLab(qCur), qP = qLab(qPrev), qP2 = qLab(qPrev2);
   const actTxt = (o, g) => o && o.act && o.act[g] ? o.act[g].map(fmt.int).join(' / ') : '—';
   const arpaInputs = (o, g) => o && o.arr ? `${fmt.money(o.arr[g])} ÷ ${fmt.num(o.n[g], 2)} (${actTxt(o, g)}, ${fmt.month(o.ks[0])}–${fmt.month(o.ks[o.ks.length - 1])})` : '—';
-  let T = `<table class="t"><thead><tr><th style="text-align:left">Metric</th><th>Blended</th><th>Growth<br><span class="muted small">YoY</span></th><th>New Model</th><th>Growth<br><span class="muted small">last 3 mo vs prior 3</span></th><th style="text-align:left">Definition</th></tr></thead><tbody>`;
+  let T = `<table class="t"><thead><tr><th style="text-align:left">Metric</th><th>Blended</th><th>Growth<br><span class="muted small">YoY</span></th><th>New Model</th><th>Growth<br><span class="muted small">last 3 mo vs prior 3</span></th><th class="plan">YE ${PL.yr} plan<br><span class="muted small">New Model</span></th><th class="plan">${py5.year} plan<br><span class="muted small">New Model</span></th><th style="text-align:left">Definition</th></tr></thead><tbody>`;
   T += S6('Revenue');
   T += R('ARR', blArr, g(blArr, blArrPrev), 'g', nmArrCur, g(nmArrCur, nmArrPrev), 'g', `Blended: 3-month run-rate to ${asOf}, commission seasonality-adjusted + ROAS × 4; vs the same at ${fmt.month(S.months[Lk - 12])}. New Model: ${q} revenue × 4; vs ${qp} × 4.`);
   T += R('TTM revenue', ttm.rev.total, ttm.yoy ? ttm.yoy.total : null, 'g', 'na', null, null, `Revenue ${fmt.month(S.months[Lk - 11])} to ${asOf} vs the 12 months before.`);
@@ -849,7 +917,7 @@ function renderInvestor() {
   T += R('Gross revenue churn', nrr ? 1 - nrr.grr : null, nrrPrev ? pts(1 - nrr.grr, 1 - nrrPrev.grr) : null, 'pts', nmNrr ? 1 - nmNrr.grr : null, nmNrrPrev ? pts(1 - nmNrr.grr, 1 - nmNrrPrev.grr) : null, 'pts', `Standard: (revenue lost + revenue reduced) ÷ earlier revenue; growth from customers who spent more is excluded. Blended: commission clients over the TTM vs the prior 12 months. New Model: ${qN} vs ${qP} (calendar quarters), every brand that paid in ${qP}, Jetour included; growth vs ${qP} against ${qP2}. Brands pay per campaign, so a quarter without a campaign counts as lost. See the breakdown below.`, pct0);
   if (nmNrr) { const sp = nmNrr.split, b = nmNrr.base, kindTxt = { grew: 'grew', kept: 'kept', reduced: 'reduced', churned: 'churned', paused: 'no campaign in quarter' };
     const brRows = nmNrr.rows.map(r => `<tr><td style="text-align:left">${esc(r.name)}</td><td>${fmt.moneyFull(r.a)}</td><td>${fmt.moneyFull(r.b)}</td><td style="text-align:left">${kindTxt[r.kind]}${r.churn ? ' (' + fmt.month(r.churn) + ')' : ''}</td></tr>`).join('');
-    T += `<tr class="mt-drill"><td colspan="6" style="text-align:left;white-space:normal"><details><summary class="small"><b>Gross revenue churn breakdown · New Model ${qN} vs ${qP}</b> · churned ${pct1(sp.churned / b)} · no campaign in quarter ${pct1(sp.paused / b)} · reduced ${pct1(sp.reduced / b)} = ${pct1((sp.churned + sp.paused + sp.reduced) / b)}</summary>
+    T += `<tr class="mt-drill"><td colspan="8" style="text-align:left;white-space:normal"><details><summary class="small"><b>Gross revenue churn breakdown · New Model ${qN} vs ${qP}</b> · churned ${pct1(sp.churned / b)} · no campaign in quarter ${pct1(sp.paused / b)} · reduced ${pct1(sp.reduced / b)} = ${pct1((sp.churned + sp.paused + sp.reduced) / b)}</summary>
       <div class="tblwrap" style="margin-top:8px"><table class="t dense fit"><thead><tr><th style="text-align:left">Brand</th><th>${qP} (USD)</th><th>${qN} (USD)</th><th style="text-align:left">Result</th></tr></thead><tbody>${brRows}
       <tr class="tot"><td style="text-align:left">Total (${nmNrr.cohort} brands)</td><td>${fmt.moneyFull(b)}</td><td>${fmt.moneyFull(nmNrr.now)}</td><td style="text-align:left">NRR ${pct1(nmNrr.nrr)} · lost or reduced ${fmt.moneyFull(sp.churned + sp.paused + sp.reduced)}</td></tr></tbody></table></div>
       <div class="note"><b>Churned</b>: ladder churn month (or refund month) on or before the end of ${qN}. <b>No campaign in quarter</b>: still active but paid nothing in ${qN}. <b>Reduced</b>: paid less than in ${qP}. All three count as gross revenue churn under the standard definition.</div></details></td></tr>`; }
@@ -857,13 +925,14 @@ function renderInvestor() {
   T += R('Gross logo churn', 'na', null, null, nmLogoChurn, pts(nmLogoChurn, nmLogoChurnPrev), 'pts', `New Model: churned (${nmChurned}) ÷ brands that have paid (${nmPaid}) since launch, annualised × 12/${monthsYtd}; refunded brands count as churned in their refund month; Touche Prive (pre-launch test) excluded; vs the same at ${fmt.month(S.months[Lk - 3])}.`, pct0);
   T += R('Gross logo retention', 'na', null, null, nmLogoChurn != null ? 1 - nmLogoChurn : null, nmLogoChurnPrev != null ? -pts(nmLogoChurn, nmLogoChurnPrev) : null, 'pts', '1 − annualised logo churn.', pct0);
   T += R('Net revenue retention', nrr ? nrr.nrr : null, nrrPrev ? pts(nrr.nrr, nrrPrev.nrr) : null, 'pts', nmNrr ? nmNrr.nrr : null, nmNrrPrev ? pts(nmNrr.nrr, nmNrrPrev.nrr) : null, 'pts', `Blended: TTM revenue from commission clients with revenue in the prior 12 months ÷ that prior revenue (annual). New Model: ${qN} revenue from brands that paid in ${qP} ÷ their ${qP} revenue (${fmt.moneyFull(nmNrr ? nmNrr.now : null)} ÷ ${fmt.moneyFull(nmNrr ? nmNrr.base : null)}, ${nmNrr ? nmNrr.cohort : 0} brands, Jetour included); calendar quarters, so it updates once a quarter; growth vs ${qP} against ${qP2}${nmNrr && nmNrr.cohort < 5 ? ' <b>(n&lt;5)</b>' : ''}. Quarterly, so not comparable with the annual Blended NRR.`, pct0);
-  const spOv = Object.entries(MT_RULES.spend).filter(([m]) => MT_SPEND_MISSING.has(m) && S.months.indexOf(m) <= Lk);
-  T += R('CAC' + mtCacTag(), cacSL, g(cacCur, cacPrev), 'g', cacSL, g(cacCur, cacPrev), 'g', MT_CAC_SRC === 'model'
-    ? `Acquisition spend since launch (${fmt.month(S.months[I.launchK])}, incl. pre-launch months) ÷ New Model brands that have paid: ${fmt.moneyFull(spendSL)} ÷ ${nmPaid}.${spOv.length ? ' ' + spOv.map(([m, v]) => fmt.month(m) + ' spend ' + fmt.moneyFull(v.usd) + ' entered manually (missing from the data pack)').join('; ') + '.' : ''} Growth: ${q} CAC (${fmt.money(cacCur)}) vs ${qp} (${fmt.money(cacPrev)}).`
-    : `Model spend incomplete (see Control · data gaps)${MT_CAC_SRC === 'live' ? '; showing the live CAC sheet (' + MT_LIVE_CAC.year + ' YTD spend ÷ acquisitions)' : ''}. Growth hidden while a month's spend is missing.`);
+  const cst = mtCacStatus() || {};
+  T += R('CAC' + mtCacTag(), cacSL, g(cacCur, cacPrev), 'g', cacSL, g(cacCur, cacPrev), 'g', (MT_CAC_SRC === 'sheet'
+    ? `CAC sheet acquisition spend since launch (${fmt.month(S.months[Math.max(0, I.launchK)])}, incl. pre-launch months) ÷ New Model brands that have paid (dashboard count): ${fmt.moneyFull(spendSL)} ÷ ${nmPaid}. Growth: ${q} CAC (${fmt.money(cacCur)}) vs ${qp} (${fmt.money(cacPrev)}).`
+    : cst.state === 'loading' ? 'Loading the CAC sheet (source of truth for acquisition spend).' : `CAC sheet ${cst.state === 'down' ? 'unreachable' : 'missing spend for ' + (cst.missing || []).map(fmt.month).join(', ')}: CAC, LTV/CAC and payback show — (no fallback). See Control · data gaps.`)
+    + (cst.diffs && cst.diffs.length ? ` <b class="neg">Sheet brand count differs from the dashboard (${cst.sheet == null ? '—' : fmt.int(cst.sheet)} vs ${cst.ours} since launch); see Control.</b>` : ''));
   T += R('ARPA', blArpa, g(blArpa, blArpaPrev), 'g', nmArpa, g(nmArpa, nmArpaPrev), 'g', `ARR ÷ average active accounts over the same 3 months. Blended: ${arpaInputs(AR, 'blended')}; vs the same a year earlier (${fmt.money(blArpaPrev)}). New Model: ${arpaInputs(AR, 'ROAS')}; vs ${fmt.month(S.months[Lk - 3])} (${fmt.money(nmArpaPrev)}).`);
   T += R('LTV', blLtv, g(blLtv, blLtvPrev), 'g', nmLtv, g(nmLtv, nmLtvPrev), 'g', `Blended: ARPA × margin ÷ assumed 20% annual churn (5-year life). New Model: ARPA × 50% ÷ annualised logo churn.`);
-  T += R('LTV / CAC', blLtvCac, null, null, nmLtvCac, null, null, 'LTV ÷ CAC.', fmt.x);
+  T += R('LTV / CAC', blLtvCac, null, null, nmLtvCac, null, null, 'LTV ÷ CAC. Blended is indicative only: blended LTV ÷ New Model CAC (commission has no acquisition cost).', fmt.x);
   T += R('Payback', 'na', null, null, nmPayback, g(nmPayback, nmPaybackPrev), 'g', `New Model: CAC ÷ monthly gross profit per brand (ARPA × 50% ÷ 12); vs ${qp}. Blended payback on commission ARPA is not meaningful.`, fmt.mo);
   T += R('Margin', margin, pts(margin, marginPrev), 'pts', NM_MARGIN, null, null, `Blended: (revenue − creator payouts) ÷ revenue, TTM; vs prior TTM. New Model: 50% assumption (payouts not tracked by brand).`, pct0);
   T += S6('Cash');
@@ -881,6 +950,31 @@ function renderInvestor() {
     <div class="card"><p class="eyebrow">Active brands</p><div class="hero">${blActive}</div><div class="delta flat">${nmActive} New Model · ${blActive - nmActive} commission</div></div>
     <div class="card"><p class="eyebrow">New Model LTV / CAC${mtCacTag()}</p><div class="hero">${fmt.x(nmLtvCac)}</div><div class="delta flat">payback ${fmt.mo(nmPayback)} · CAC ${money(cacSL)}</div></div>
   </div>`;
+  const dv = PL.drivers, pct1b = v => fmt.pct(v, 1);
+  const qRows = PL.quarters.map(x => `<tr><td style="text-align:left">${x.lab} new brands</td><td>${fmt.int(x.newBrands)}</td><td style="text-align:left" class="muted small">${x.override ? 'set in MT_PLAN' : dv.qLabCur + ' new brands × ' + dv.qLabCur + '/' + dv.qLabPrev + ' growth (' + dv.newCur + ' × ' + dv.newCur + '/' + dv.newPrev + ')'}</td></tr><tr><td style="text-align:left">${x.lab} revenue</td><td>${fmt.moneyFull(x.rev)}</td><td style="text-align:left" class="muted small">previous quarter × NRR ${pct1b(dv.nrrAvg)} + ${fmt.int(x.newBrands)} × ${fmt.moneyFull(dv.firstQRev)}</td></tr>`).join('');
+  const drv = `<table class="t dense fit"><thead><tr><th style="text-align:left">Driver</th><th>Value</th><th style="text-align:left">How it is calculated</th></tr></thead><tbody>
+    <tr><td style="text-align:left">${dv.qLabCur} revenue (actual)</td><td>${fmt.moneyFull(dv.revCur)}</td><td style="text-align:left" class="muted small">ladder, New Model brands</td></tr>
+    <tr><td style="text-align:left">Quarterly NRR used</td><td>${pct1b(dv.nrrAvg)}</td><td style="text-align:left" class="muted small">average of ${dv.qLabPrev} (${pct1b(dv.nrrPrev)}) and ${dv.qLabCur} (${pct1b(dv.nrrCur)})</td></tr>
+    <tr><td style="text-align:left">First-quarter revenue per new brand</td><td>${fmt.moneyFull(dv.firstQRev)}</td><td style="text-align:left" class="muted small">${dv.qLabCur} revenue from brands that first paid in it (${fmt.moneyFull(dv.revNewCur)}) ÷ ${dv.newCur}</td></tr>
+    ${qRows}
+    <tr><td style="text-align:left">Logo churn (held)</td><td>${pct1b(dv.churn)}</td><td style="text-align:left" class="muted small">current annualised logo churn, applied to all brands signed by year end</td></tr>
+    <tr><td style="text-align:left">CAC per new brand (projected quarters)</td><td>${fmt.money(dv.cacQ)}</td><td style="text-align:left" class="muted small">${dv.qLabCur} CAC sheet spend ÷ ${dv.newCur} new brands</td></tr>
+    <tr><td style="text-align:left">2027–2030 inputs</td><td colspan="2" style="text-align:left" class="muted small">${Object.entries(MT_PLAN.years).map(([y, i]) => y + ': ' + fmt.int(i.new) + ' new, churn ' + fmt.pct(i.churn, 0) + ', ARPA ' + fmt.money(i.arpa)).join(' · ')}; CAC per new brand = ARPA × ${fmt.pct(MT_PLAN.margin, 0)} ÷ 12 × ${MT_PLAN.payback_months}-month payback (Investor Metrics v7.1)</td></tr></tbody></table>`;
+  const pathT = `<table class="t dense fit"><thead><tr><th style="text-align:left"></th>${PL.path.map(x => `<th>${x.ye ? 'YE ' + x.year : x.year}</th>`).join('')}</tr></thead><tbody>
+    <tr><td style="text-align:left">New brands signed in year</td>${PL.path.map(x => `<td>${fmt.int(x.new)}</td>`).join('')}</tr>
+    <tr><td style="text-align:left">Logo churn</td>${PL.path.map(x => `<td>${fmt.pct(x.churn, 1)}</td>`).join('')}</tr>
+    <tr><td style="text-align:left">Active brands (year end)</td>${PL.path.map(x => `<td>${fmt.int(x.active)}</td>`).join('')}</tr>
+    <tr><td style="text-align:left">ARPA</td>${PL.path.map(x => `<td>${fmt.money(x.arpa)}</td>`).join('')}</tr>
+    <tr class="tot"><td style="text-align:left">New Model ARR</td>${PL.path.map(x => `<td>${fmt.money(x.arr)}</td>`).join('')}</tr>
+    <tr><td style="text-align:left">CAC per new brand</td>${PL.path.map(x => `<td>${fmt.money(x.cac)}</td>`).join('')}</tr>
+    <tr><td style="text-align:left">Acquisition spend</td>${PL.path.map(x => `<td>${x.spend == null ? '—' : fmt.money(x.spend)}</td>`).join('')}</tr>
+    <tr><td style="text-align:left">Cumulative brands signed</td>${PL.path.map(x => `<td>${fmt.int(x.cum)}</td>`).join('')}</tr></tbody></table>`;
+  const arrNow = nmArrCur, yeArr = PL.ye.arr;
+  const planCard = `<div class="card" style="margin-top:16px"><p class="eyebrow">Plan · path to ${py5.year}</p><h3 class="h3">New Model ARR ${fmt.money(arrNow)} today (${asOf}) · ${yeArr ? fmt.pct(arrNow / yeArr, 0) + ' of the YE ' + PL.yr + ' plan (' + fmt.money(yeArr) + ')' : '—'} · ${fmt.money(py5.arr)} by ${py5.year}</h3>
+    <div class="grid g2" style="margin-top:8px"><div><p class="eyebrow">Actual quarterly ARR vs YE ${PL.yr} plan</p><div class="chart" id="inv-plan-q"></div></div><div><p class="eyebrow">Plan ARR by year</p><div class="chart" id="inv-plan-y"></div></div></div>
+    <div class="tblwrap" style="margin-top:12px">${pathT}</div>
+    <details style="margin-top:10px"><summary class="small"><b>Plan drivers</b> · how every plan figure is calculated</summary><div class="tblwrap" style="margin-top:8px">${drv}</div></details>
+    <div class="note">${esc(MT_PLAN.source)}. YE ${PL.yr} is recalculated from the latest complete quarter each month; 2027–2030 inputs are management targets from Investor Metrics v7.1. To revise, change the inputs in MT_PLAN (for example a lower Q4 new-brand count). Plan covers New Model only (commission is not in the plan).</div></div>`;
   const cashCard = `<div class="card" style="margin-top:16px"><p class="eyebrow">Cash inputs</p><h3 class="h3">Entered manually until linked (${esc(MT_RULES.cash.as_of)}: cash ${fmt.moneyFull(MT_RULES.cash.balance_usd)}, burn ${fmt.moneyFull(MT_RULES.cash.monthly_burn_usd)}/month). Overwrite here for a what-if in this browser.</h3>
     <div class="statrow" style="margin-top:8px;gap:18px;flex-wrap:wrap">
       <label class="small">Cash at month end (USD)<br><input id="cash-bal" type="number" value="${cash.balance_usd ?? ''}" style="width:150px"></label>
@@ -889,7 +983,13 @@ function renderInvestor() {
       <label class="small">As of (e.g. 31 Oct 2026)<br><input id="cash-asof" type="text" value="${cash.as_of ?? ''}" style="width:110px"></label>
     </div></div>`;
   root.innerHTML = hdr + heroes + `<div class="card" style="margin-top:16px"><p class="eyebrow">Investor metrics</p><h3 class="h3">Blended and New Model, with growth and definitions</h3><div class="tblwrap">${T}</div>
-    <div class="note">Growth for Blended is year on year. For New Model (launched Jan 2026, so no year-on-year yet) growth is the last 3 months (${q}) against the 3 months before (${qp}), except NRR and gross revenue churn, which compare calendar quarters (${qN} vs ${qP}). YE 2026 and 2030 plan columns follow once the updated Investor Metrics file is in.</div></div>` + cashCard;
+    <div class="note">Growth for Blended is year on year. For New Model (launched Jan 2026, so no year-on-year yet) growth is the last 3 months (${q}) against the 3 months before (${qp}), except NRR and gross revenue churn, which compare calendar quarters (${qN} vs ${qP}). Plan columns: ${esc(MT_PLAN.source)} (see Plan below); 2030 new brands are cumulative since launch.</div></div>` + planCard + cashCard;
+  try { const qs = []; for (let k = 2; k <= I.qEnd; k += 3) if (S.months[k] >= '2026-01') qs.push(k);
+    const lab = qs.map(k => qLab([k - 2, k - 1, k])).concat(PL.quarters.map(x => x.lab));
+    const act = qs.map(k => nmRev([k - 2, k - 1, k]) * 4).concat(PL.quarters.map(() => null));
+    const pl = qs.map((_, i) => i === qs.length - 1 ? act[i] : null).concat(PL.quarters.map(x => x.rev != null ? x.rev * 4 : null));
+    barChart(document.getElementById('inv-plan-q'), { labels: lab, series: [{ name: 'Actual ARR', color: 'var(--c-roas)', values: act }], lines: [{ name: 'Plan ARR', color: 'var(--ink)', values: pl }], height: 200, labelEvery: 1, stacked: false });
+    barChart(document.getElementById('inv-plan-y'), { labels: [asOf + ' actual'].concat(PL.path.map(x => x.ye ? 'YE ' + x.year : String(x.year))), series: [{ name: 'Actual ARR', color: 'var(--c-roas)', values: [nmArrCur].concat(PL.path.map(() => null)) }, { name: 'Plan ARR', color: 'var(--ink)', values: [null].concat(PL.path.map(x => x.arr)) }], height: 200, labelEvery: 1, stacked: true }); } catch (e) {}
   root.querySelectorAll('#cash-bal,#cash-fund,#cash-burn,#cash-asof').forEach(el => el.addEventListener('change', () => {
     state.cash = { balance_usd: document.getElementById('cash-bal').value, secured_funding_usd: document.getElementById('cash-fund').value, monthly_burn_usd: document.getElementById('cash-burn').value, as_of: document.getElementById('cash-asof').value };
     LS('mm.cash', JSON.stringify(state.cash)); renderInvestor(); }));
@@ -1092,7 +1192,7 @@ function renderPerformance() {
     + R('Enterprise share of commission revenue', p => p.rev.named ? p.rev.leg_seg.Enterprise / p.rev.named : null, pct0));
   // ---- ROAS economics
   const I = computeInvestor();
-  const ecoT = tbl(R('Merchant acquisition spend', p => p.cac ? p.cac.spend : null, money, 'sub') + R('ROAS brands signed', p => p.events.roas_signed, fmt.int, 'sub') + R('CAC (spend ÷ brands signed)', p => p.cac ? p.cac.cac : null, money)
+  const ecoT = tbl(R('Acquisition spend (CAC sheet)', p => mtPeriodCac(p).spend, money, 'sub') + R('ROAS brands signed', p => p.events.roas_signed, fmt.int, 'sub') + R('CAC (spend ÷ brands first paid)', p => mtPeriodCac(p).cac, money)
     + R('ROAS revenue', p => p.rev.roas, money, 'sub') + R('ROAS ARR (3 months × 4)', p => p.arr.roas, money, 'sub', false)
     + row('As at ' + fmt.month(Lm) + ' (Investor definitions)', [`<td colspan="${n}" style="text-align:left" class="muted">ARPA ${fmt.money(I.nmArpa)} · LTV ${fmt.money(I.nmLtv)} · CAC ${fmt.money(I.cacSL)}${mtCacTag()} · LTV/CAC ${fmt.x(I.nmLtvCac)} · payback ${fmt.mo(I.nmPayback)} · logo churn ${fmt.pct(I.nmLogoChurn, 0)} annualised</td>`]));
   // ---- Creators
@@ -1185,7 +1285,7 @@ function renderPerformance() {
   barChart(document.getElementById('pf-churn'), { labels: lab, fullLabels: full, kind: 'num', height: 200, labelEvery: 1, series: [{ name: 'Commission churn', color: 'var(--c-legacy)', values: ps.map(p => p.churn.legacy ? p.churn.legacy.events : 0) }, { name: 'ROAS churn', color: 'var(--c-roas)', values: ps.map(p => p.churn.ROAS ? p.churn.ROAS.events : 0) }], lines: [{ name: 'At risk', color: '#d97706', values: ks.map(k => S.at_risk_leg[k].length + S.at_risk_roas[k].length) }] });
   lineChart(document.getElementById('pf-arpa'), { labels: lab, fullLabels: full, kind: 'money', height: 200, labelEvery: 1, series: [{ name: 'Blended', color: 'var(--ink)', values: ps.map(p => AP(p).blended) }, { name: 'Blended excl. Enterprise', color: '#64748b', values: ps.map(p => AP(p).blended_ex_ent) }, { name: 'Growth', color: SEG_C.Growth, values: ps.map(p => AP(p).Growth) }, { name: 'SME', color: SEG_C.SME, values: ps.map(p => AP(p).SME) }, { name: 'ROAS', color: 'var(--c-roas)', values: ps.map(p => AP(p).ROAS) }] });
   lineChart(document.getElementById('pf-arpa-ent'), { labels: lab, fullLabels: full, kind: 'money', height: 200, labelEvery: 1, series: [{ name: 'Enterprise', color: SEG_C.Enterprise, values: ps.map(p => AP(p).Enterprise) }] });
-  dual('pf-cac', [{ name: 'Spend', color: 'var(--c-roas)', values: ps.map(p => p.cac ? p.cac.spend : null), kind: 'money' }], { name: 'Brands signed', color: 'var(--ink)', values: ps.map(p => p.events.roas_signed) }, ['money', 'num']);
+  dual('pf-cac', [{ name: 'Spend', color: 'var(--c-roas)', values: ps.map(p => mtPeriodCac(p).spend), kind: 'money' }], { name: 'Brands signed', color: 'var(--ink)', values: ps.map(p => p.events.roas_signed) }, ['money', 'num']);
   barChart(document.getElementById('pf-roas'), { labels: lab, fullLabels: full, kind: 'money', height: 200, labelEvery: 1, series: [{ name: 'ROAS revenue', color: 'var(--c-roas)', values: v(S.rev_roas) }], lines: [{ name: 'ROAS ARR', color: 'var(--ink-3)', values: v(S.arr_roas) }] });
   lineChart(document.getElementById('pf-cre'), { labels: lab, fullLabels: full, kind: 'num', height: 200, labelEvery: 1, series: [{ name: 'Active', color: '#db2777', values: v(cr.active) }, { name: 'Emerging', color: '#f59e0b', values: v(cr.emerging) }, { name: 'Major', color: 'var(--ink)', values: v(cr.major) }] });
   dual('pf-cre2', [{ name: 'Net orders', color: 'var(--teal)', values: v(cr.orders_total), kind: 'num' }], { name: 'Orders per active creator', color: '#db2777', values: ps.map(p => p.creators.orders_per_active) }, ['num', 'num']);
@@ -1248,7 +1348,7 @@ function renderActuals() {
   T += R('Orders from active creators', cr.orders_active, fmt.int, 'sub'); T += R('Orders from Major creators', cr.orders_major, fmt.int, 'sub'); T += R('Creators recruited (first order)', cr.recruited, fmt.int, 'sub');
   T += sec('Acquisition', total);
   T += R('Merchant acquisition spend', S.cac_merchant_spend, money, 'sub'); T += R('Creator acquisition spend', S.cac_creator_spend, money, 'sub');
-  T += R('Merchant CAC (month)', months.map((_, k) => { const s = S.cac_merchant_spend[k], b = mv.roas_signed[k]; return (s != null && b) ? s / b : null; }), money, '', p => p.cac ? p.cac.cac : null);
+  T += R('Merchant CAC (month, CAC sheet)', months.map((_, k) => { const s = mtSheetSpend([S.months[k]]), b = mtHmFirstPaidIn([S.months[k]]); return (s != null && b) ? s / b : null; }), money, '', p => mtPeriodCac(p).cac);
   T += sec('Metrics', total);
   T += R('GMV (commission, net)', S.gmv, money); T += R('Take rate', months.map((_, k) => S.gmv[k] ? S.rev_legacy[k] / S.gmv[k] : null), pct1, '', p => p.gmv ? p.rev.legacy / p.gmv : null);
   T += R('AOV (GMV ÷ orders)', months.map((_, k) => S.gmv[k] && cr.orders_total[k] ? S.gmv[k] / cr.orders_total[k] : null), v => fmt.money(v, 0), '', p => p.gmv && p.creators.orders_total ? p.gmv / p.creators.orders_total : null);
@@ -1357,7 +1457,7 @@ function renderControl() {
   root.innerHTML = h`<div class="pagehead"><div><p class="eyebrow">08 · Control &amp; data quality</p><h1 class="h2">Finance controls and the monthly load check</h1><p>Nothing here changes a number by hand. Confirmations and switches set status; every figure is recomputed from the extracts. Changes are kept in this browser until you export <code>control.json</code> and commit it with the next monthly build.</p></div>
       <button class="btn" id="export-ctl">Export control.json</button></div>
     ${healthCard}
-    ${(() => { const gl = MT_GAPS || []; const ic = l => l === 'bad' ? '<span class="neg">●</span>' : l === 'warn' ? '<span style="color:var(--ochre)">●</span>' : '<span class="pos">●</span>';
+    ${(() => { const gl = mtCacGaps().concat(MT_GAPS || []); const ic = l => l === 'bad' ? '<span class="neg">●</span>' : l === 'warn' ? '<span style="color:var(--ochre)">●</span>' : '<span class="pos">●</span>';
       return `<div class="card" style="margin-bottom:16px"><p class="eyebrow">Data gaps · inputs to provide</p><h3 class="h3">${gl.filter(g => g.level === 'bad').length ? '<span class="neg">' + gl.filter(g => g.level === 'bad').length + ' missing</span> · ' : ''}${gl.filter(g => g.level === 'warn').length} entered manually or pending</h3>
         <div class="tblwrap"><table class="t dense"><tbody>${gl.length ? gl.map(g => `<tr><td style="width:22px">${ic(g.level)}</td><td style="text-align:left;white-space:nowrap"><b>${esc(g.title)}</b></td><td style="text-align:left;white-space:normal" class="small">${esc(g.detail)}</td></tr>`).join('') : '<tr><td class="muted">No gaps</td></tr>'}</tbody></table></div>
         <div class="note">Listed automatically on every load: inputs missing from the data pack, and figures entered by hand until they come through a source. Send these with the next data pack.</div></div>`; })()}
@@ -1439,9 +1539,9 @@ function renderKpis() {
     </div>
     <div class="grid g4" style="margin-top:14px">
       ${card('LTV · ROAS', fmt.money(I.nmLtv), '<div class="muted small">ARPA × 50% ÷ annualised logo churn ' + fmt.pct(I.nmLogoChurn, 0) + '</div>')}
-      ${card('LTV / CAC · ROAS' + mtCacTag(), fmt.x(I.nmLtvCac), '<div class="muted small">LTV ÷ CAC' + (MT_CAC_SRC === 'live' ? ' (live CAC sheet)' : ' (since launch)') + '</div>')}
+      ${card('LTV / CAC · ROAS' + mtCacTag(), fmt.x(I.nmLtvCac), '<div class="muted small">LTV ÷ CAC (since launch)</div>')}
       ${card('Payback · ROAS' + mtCacTag(), fmt.mo(I.nmPayback), '<div class="muted small">CAC ÷ monthly gross profit per brand</div>')}
-      ${card('Merchant CAC' + (MT_CAC_SRC === 'live' ? ' (live)' : ' (since launch)'), fmt.money(I.cacSL), '<div class="muted small">' + (MT_CAC_SRC === 'live' ? 'live CAC sheet, ' + MT_LIVE_CAC.year + ' YTD (model spend incomplete)' : 'spend since launch ÷ brands that have paid (' + fmt.moneyFull(I.spendSL) + ' ÷ ' + I.nmPaid + ')') + '</div>')}
+      ${card('Merchant CAC (since launch)' + mtCacTag(), fmt.money(I.cacSL), '<div class="muted small">' + (I.cacSL != null ? 'CAC sheet spend ÷ brands that have paid (' + fmt.moneyFull(I.spendSL) + ' ÷ ' + I.nmPaid + ')' : 'waiting for the CAC sheet (see Control)') + '</div>')}
     </div>
     <div class="grid g4" style="margin-top:14px">
       ${card('Active clients · ' + esc(sel.label), fmt.int(sel.active_end.total), split2('Commission', sel.active_end.legacy, 'ROAS', sel.active_end.roas))}
@@ -1869,12 +1969,15 @@ function renderSegmentation() {
       cacYear = (saved && yrs.includes(saved)) ? saved : (yrs.includes(2026) ? 2026 : yrs[yrs.length - 1]);
       renderCac();
       // publish live blended merchant CAC (current year YTD) for LTV:CAC on KPIs / Investor / Segmentation
+      try { const sp = {}, ct = {}; PARSED.months.forEach((mm, i) => { const key = mm.y + '-' + String(mm.m).padStart(2, '0'); sp[key] = PARSED.merchant.costUSD[i]; ct[key] = PARSED.merchant.count[i]; });
+        MT_CAC_SHEET = { ok: true, spend: sp, count: ct }; } catch (e) { MT_CAC_SHEET = { ok: false, err: String(e && e.message || e) }; }
+      try { if (typeof renderAll === 'function' && M) renderAll(); } catch (e) {}
       try { const C = cacForYear(PARSED, cacYear); const s = C.merchant; let cost = 0, n = 0;
         s.cost.forEach((v, m) => { if (v != null) { cost += v; if (s.count[m] != null) n += s.count[m]; } });
         mtLiveReport('cac', { ok: true, lastMonth: PARSED.months.length ? PARSED.months[PARSED.months.length - 1] : null, n, cost });
         if (n > 0) { MT_LIVE_CAC = { cac: cost / n, cost, n, year: cacYear };
           ['renderKpis', 'renderInvestor', 'renderSegmentation'].forEach(f => { try { if (typeof window[f] === 'function') window[f](); } catch (e) {} }); } } catch (e) {}
-    } catch (e) { mtLiveReport('cac', { ok: false, err: String(e && e.message || e) }); setCacMsg('<b>Live data problem.</b> Could not load the CAC sheet (' + esc2(String(e && e.message || e)) + '). Open this page over the web (the published Google Sheet must be reachable from the browser).'); }
+    } catch (e) { MT_CAC_SHEET = { ok: false, err: String(e && e.message || e) }; try { renderAll(); } catch (e2) {} mtLiveReport('cac', { ok: false, err: String(e && e.message || e) }); setCacMsg('<b>Live data problem.</b> Could not load the CAC sheet (' + esc2(String(e && e.message || e)) + '). Open this page over the web (the published Google Sheet must be reachable from the browser).'); }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initCac); else initCac();
 })();
