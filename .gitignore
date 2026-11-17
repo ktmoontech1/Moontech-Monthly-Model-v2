@@ -1,0 +1,3 @@
+data/pack/
+__pycache__/
+*.pyc

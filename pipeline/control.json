@@ -1,0 +1,28 @@
+{
+  "_comment": "Finance control file. Edit here (or export from the dashboard Control page) and re-run build.py.",
+  "latest_month": "2026-10",
+  "ounass": {
+    "merchant": "Ounass",
+    "buffer_aed": 150000,
+    "provisional_months": [
+      "2026-09",
+      "2026-10"
+    ],
+    "confirmed_months": [
+      "2026-07",
+      "2026-08"
+    ]
+  },
+  "capitalisation": {
+    "2024": "Split",
+    "2025": "Capitalised",
+    "2026": "Expensed"
+  },
+  "cash": {
+    "as_of": "31 Oct 2026",
+    "balance_usd": 208034,
+    "secured_funding_usd": null,
+    "monthly_burn_usd": 38279,
+    "_note": "Investor page cash inputs (USD); not in any export. V2 2026-11-16: figures from Kareem (Investor Metrics v7.1); to be linked"
+  }
+}

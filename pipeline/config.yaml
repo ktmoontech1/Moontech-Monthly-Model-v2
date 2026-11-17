@@ -1,0 +1,99 @@
+# MoonTech dashboard: settings. Every threshold lives here; never hardcode these in the logic.
+# Spec references in brackets. Currency: AED unless stated; USD = AED / fx.aed_per_usd.
+
+fx:
+  aed_per_usd: 3.6725                    # [§1] single FX setting
+
+reporting:
+  currency: USD
+  default_period: TTM
+
+merchant_status:                         # [§7] legacy (Datos) merchants
+  active_min_annualised_usd: 950         # annualised revenue test (TTM, or since-first-revenue x12/months in year 1)
+  quiet_month_threshold_usd: 100         # a month below this counts as "quiet"
+  quiet_months_to_churn: 6               # 6 consecutive quiet months -> churned
+  new_cohort_window_months: 12           # "New"/"Reactivated" revenue window [§7 splits]
+
+roas_status:                             # [§7] ladder brands
+  months_without_payment_to_churn: null  # LOCKED 2026-11-13 (Haseeb): no backstop — a brand churns only when the ladder marks it churned (Churn month)
+  other_pricing_levels_not_matching: "^L[0-9]+$"
+  include_as_roas: ["Jetour"]              # New Model = ROAS brands incl. Jetour (cost-per-lead), per Haseeb 5-Nov; counted as ROAS everywhere   # any Level not matching this regex = Other pricing (e.g. CPL / Jetour)
+  launch_month: 2025-11                  # first ROAS signing; "since launch" periods start here [§10.5]
+  exclude_from_new_model: ["Touche Prive"]   # V2 2026-11-17 (Kareem): Nov-25 pre-launch test — out of HeyMoon.ai brand counts, churn and unit economics from 2026; 2024-25 values stay frozen
+  flag_after_months_without_payment: 6   # V2 2026-11-17: not a churn rule — lists active brands with this many months without payment on Control ("update the ladder")
+  direct_l2: ["Izil"]                    # V2 2026-11-16: entered at L5 with a single campaign; counts as an L2+ customer (customer retention L2+)
+
+cac:                                     # V2 2026-11-17 (Kareem): source = live CAC sheet spend; brand count from the ladder
+  brand_count: ladder_first_paid_excl_migrated   # brands that have paid (first payment month), excl. brands migrated from commission; refunded brands and Jetour count. To discuss with Haseeb (sheet counts 39 vs 41 at Oct-26)
+  fallback: none                         # no fallback: a month without spend shows CAC as —
+
+investor:                                # V2 page settings (agreed with Kareem 16-17 Nov 2026); index.html reads these
+  arpa_method: average_active_3m         # ARPA = ARR ÷ average active accounts over the same 3 months, every page (replaces month-end count)
+  point_in_time_growth: vs_3_months_earlier
+  nrr_upgrade_basis: calendar_quarter    # NRR and upgrade rate: latest complete quarter vs the one before (answers the open point in Changes post handover)
+  ounass_default: added_back             # one ARR everywhere; Investor page always adds the buffer back and says the months are provisional
+
+plan:                                    # V2 2026-11-16 (Kareem, option B): Investor Metrics v7.1 method, YE of the update year calculated on dashboard actuals; 2027-2030 = v7.1 inputs
+  source: "Investor Metrics v7.1 method, calculated on dashboard actuals"
+  q_new_brands: null                     # e.g. {"Q4-26": 25} to override the new-brand growth rule for a quarter
+  margin: 0.5
+  payback_months: 6
+  years:
+    2027: {new: 300, churn: 0.2, arpa: 10000}
+    2028: {new: 850, churn: 0.2, arpa: 14000}
+    2029: {new: 1650, churn: 0.2, arpa: 19000}
+    2030: {new: 2600, churn: 0.2, arpa: 24000}
+
+creator_status:                          # [§8]
+  active_min_avg_net_orders_per_month: 5 # averaged over TTM, or since first order if < 12 months
+  activity_window_months: 6              # >= 1 order in last 6 months
+  min_rounded_net_orders_to_add: 1       # [S4]
+
+segmentation:                            # [§6] annualised basis for entry AND exit
+  enterprise_enter_annualised_aed: 1000000
+  enterprise_exit_annualised_aed: 500000 # exit -> Growth
+  growth_vs_sme_company_revenue_usd: 50000000
+  major_creator_enter_annualised_orders: 5000
+  major_creator_exit_annualised_orders: 2500
+
+name_matching:                           # [§5]
+  strip_suffixes: ["MT", "(MT)", "GZ", "PLT", "LLC", "FZ", "FZE", "FZC", "Ltd"]
+  contains_min_length: 5
+  fuzzy_min_similarity: 0.80             # auto-confirm exact/contains; fuzzy/no-match/new ROAS link -> Proposed
+
+creator_id_checks:                       # [S4 rule 6]
+  valid_lengths: [5, 6, 10, 11, 12]
+  rounding_match_sig_figs: [4, 5, 6, 7, 8, 9]
+
+arr:                                     # [§10.1]
+  window_months: 3
+  roas_multiplier: 4                     # ROAS ARR = last 3 months x 4 (no seasonality)
+  seasonality_weights_rule: "average monthly share of legacy revenue over the last 2 full calendar years; recalc each January"
+  provisional_months_handling: OPEN      # D1: "estimate" or "lag" (decision pending)
+
+churn:                                   # [§10.3]
+  stored_base_rate: monthly
+  small_sample_flag_below_events: 5
+  at_risk_quiet_months: [3, 5]
+
+ltv:                                     # [§10.6]
+  lifetime_cap_months: 60
+  roas_margin: 0.50                      # assumption until ROAS creator payouts can be separated (F6)
+  legacy_margin: actual_contribution_margin_TTM
+  legacy_churn_basis: gross_revenue_churn   # 1 - GRR (rolling 12m)
+  roas_churn_basis: logo_churn
+
+roas_tiers:                              # ROAS S/M/L size definition
+  method: cac_payback                    # agreed 5-Nov (Haseeb): margin on paid ÷ CAC — <1x Small, 1x–2x Medium, >2x Large
+  large_payback_multiple: 2.0            # cac_payback only: Large = cumulative profit (paid x roas_margin) >= this x CAC. Medium = 1x..this. Agreed 5-Nov.
+
+reconciliation:
+  multi_grain_tie_out_tolerance: 0.01    # [§3 generic recipe]
+
+small_cells_flag_below_accounts: 5       # [§10.8]
+
+development_treatment_by_month:          # [§9] Expensed | Capitalised
+  2024-01..2024-06: Capitalised
+  2024-07..2024-12: Expensed
+  2025-01..2025-12: Capitalised
+  2026-01..: Expensed                    # may switch to Capitalised at YE
