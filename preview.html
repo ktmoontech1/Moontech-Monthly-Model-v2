@@ -1032,7 +1032,7 @@ function renderInvestor() {
 .inv .steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.inv .step{padding:4px 18px 4px 0;border-right:1px solid var(--rule);margin-right:18px}.inv .step:last-child{border:0;margin:0}.inv .step .n{font:700 13px "Inter Tight",Inter;color:var(--ic)}.inv .step h3{margin:2px 0 4px;font:600 16px "Inter Tight",Inter}.inv .step p{margin:0;color:var(--ink-2);font-size:13px}
 .inv .fact{margin-top:16px;padding-top:14px;border-top:1px solid var(--rule);font-size:13.5px}.inv .raise{background:var(--ink);color:var(--paper);border-radius:4px;padding:12px 18px;font-size:15px;margin-bottom:14px}
 .inv details{background:var(--card);border:1px solid var(--rule);border-radius:4px;padding:14px 20px;margin-top:34px}.inv summary{cursor:pointer;font-weight:600;font-size:13px}.inv dl{display:grid;grid-template-columns:220px 1fr;gap:8px 20px;margin:16px 0 4px;font-size:13px}.inv dt{font-weight:600}.inv dd{margin:0;color:var(--ink-2)}
-.inv .pt{width:100%;border-collapse:collapse;font-size:13.5px}.inv .pt th,.inv .pt td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--rule)}.inv .pt th:first-child,.inv .pt td:first-child{text-align:left}.inv .pt th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600}.inv .pt td.now{color:var(--ink-3)}.inv .pt td.ar{color:#E8401C;font-weight:700;width:30px;text-align:center}.inv .pc{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:10px}.inv .pc.up{background:rgba(31,138,82,.12);color:#1F8A52}.inv .pc.dn{background:rgba(176,114,24,.14);color:#8A5A12}.inv .pc.eq{background:var(--paper-2);color:var(--ink-3)}.inv .pt .why{font-size:11.5px;color:var(--ink-3);margin-top:2px}.inv .pt tr.grp td{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);background:var(--paper);padding-top:12px}
+.inv h2.st{font:600 24px/1.2 "Inter Tight",Inter,sans-serif;letter-spacing:-.01em;margin:0 0 14px}.inv .pt{width:100%;border-collapse:collapse;font-size:13.5px}.inv .pt th,.inv .pt td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--rule)}.inv .pt th:first-child,.inv .pt td:first-child{text-align:left}.inv .pt th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600}.inv .pt td.now{color:var(--ink-3)}.inv .pt td.ar{color:#E8401C;font-weight:700;width:30px;text-align:center}.inv .pc{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:10px}.inv .pc.up{background:rgba(31,138,82,.12);color:#1F8A52}.inv .pc.dn{background:rgba(176,114,24,.14);color:#8A5A12}.inv .pc.eq{background:var(--paper-2);color:var(--ink-3)}.inv .pt td.basis{text-align:left;color:var(--ink-2);font-size:12.5px;max-width:420px}.inv .pt .why{font-size:11.5px;color:var(--ink-3);margin-top:2px}.inv .pt tr.grp td{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);background:var(--paper);padding-top:12px}
 .inv .prov{border-left:3px solid var(--ochre);background:var(--card);padding:9px 14px;font-size:12.5px;color:var(--ink-2);margin:0 0 18px}
 @media(max-width:900px){.inv .g4{grid-template-columns:repeat(2,minmax(0,1fr))}.inv .g3,.inv .steps{grid-template-columns:1fr}.inv .step{border:0;margin:0 0 12px}.inv dl{grid-template-columns:1fr}}</style>`;
   const cq2 = (l, v, d, lower, s, kind) => { let chip = ''; if (d != null && isFinite(d)) { const good = lower ? d <= 0 : d >= 0, t = kind === 'pts' ? (d >= 0 ? '+' : '−') + Math.abs(d * 100).toFixed(0) + ' pts' : kind === 'mo' ? Math.abs(d).toFixed(1) + ' mo ' + (d <= 0 ? 'faster' : 'slower') : vS(d); chip = `<div class="val2" style="color:${good ? '#1F8A52' : '#C0392B'}">${good ? '▲' : '▼'} ${t} <span class="sm" style="font-weight:400">vs ${qP}</span></div>`; } return `<div class="cd"><p class="eb">${l}</p><div class="mid">${v}</div>${chip}${s ? '<div class="sm">' + s + '</div>' : ''}</div>`; };
@@ -1051,45 +1051,50 @@ function renderInvestor() {
     return n ? sum(pays) * 4 / n : null; })();
   const spQ3 = mtSheetSpend(mOf(win(qe - 2, qe))), P1 = path[0], pbNow = (cacL && cacL.cac && apsNow) ? (cacL.cac / PTH.conv) / (apsNow * (gm || PTH.margin) / 12) : null;
   const pRow = (l, a, b) => `<tr><td>${l}</td><td class="now">${a}</td><td class="ar">→</td><td><b>${b}</b></td><td></td></tr>`;
-  const uRow = (l, a, b, a0, b0, kind, lower, why = '') => { let ch = '<span class="pc eq">held</span>';
+  const uRowOld = (l, a, b, a0, b0, kind, lower, why = '') => { let ch = '<span class="pc eq">held</span>';
     if (a0 != null && b0 != null) { const d = kind === 'pts' ? b0 - a0 : b0 / a0 - 1, held = kind === 'pts' ? Math.abs(d) < 0.02 : Math.abs(d) < 0.05;
       if (!held) { const good = lower ? d < 0 : d > 0, t = kind === 'pts' ? (d >= 0 ? '+' : '−') + Math.abs(d * 100).toFixed(0) + ' pts' : vS(d); ch = `<span class="pc ${good ? 'up' : 'dn'}">${t}</span>`; } }
     return `<tr><td>${l}${why ? '<div class="why">' + why + '</div>' : ''}</td><td class="now">${a}</td><td class="ar">→</td><td><b>${b}</b></td><td>${ch}</td></tr>`; };
+  const uRow = (l, a, b, a0, b0, kind, lower, why = '') => `<tr><td>${l}</td><td class="now">${a}</td><td class="ar">→</td><td><b>${b}</b></td><td class="basis">${why}</td></tr>`;
+  // evidence for the Basis column (all from today's data)
+  const scPays = nm.filter(br => sinceK(br) >= 0 && sinceK(br) <= Lk && maxLv(br, Lk) >= 2).map(br => sum((br.monthly || []).slice(Lk - 2, Lk + 1)) * 4).filter(v => v > 0);
+  const topAps = scPays.length ? Math.max(...scPays) : null, nAbove = scPays.filter(v => v >= PTH.arr_per_scaled[0]).length;
+  const p1Pool = nm.filter(br => !br.migrated && sinceK(br) >= 0 && sinceK(br) <= Lk - 2), p1Sc = p1Pool.filter(br => maxLv(br, Lk) >= 2).length;
+  const convLo = p1Pool.length ? p1Sc / p1Pool.length : null, convHi = (scaled.length + lostP1.length) ? scaled.length / (scaled.length + lostP1.length) : null;
   const gRow = t => `<tr class="grp"><td colspan="5">${t}</td></tr>`;
   // where the 2030 ARR comes from: brand count at today's ARR per brand, ARR per brand uplift, Phase 1 revenue
-  const brV = apsNow ? P5.scaled * apsNow : null, brU = apsNow ? P5.scaled * (P5.aps - apsNow) : null, brP = P5.starts * PTH.phase1_price;
-  const brRow = (l, v, col) => `<div style="margin:9px 0"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${l}</span><b>${vM(v)}</b></div><div style="height:9px;background:var(--paper-2);border-radius:3px;margin-top:4px;overflow:hidden"><i style="display:block;height:100%;width:${v != null ? (100 * v / P5.arr).toFixed(1) : 0}%;background:${col}"></i></div></div>`;
-  const bridge = `<div style="margin-top:16px"><p class="eb" style="margin-bottom:4px">Where the ${vM(P5.arr)} comes from</p>
-   ${brRow(fmt.int(P5.scaled) + ' scaled brands × today\'s ' + vM(apsNow), brV, 'var(--ink)')}
-   ${brRow('ARR per scaled brand ' + vM(apsNow) + ' → ' + vM(P5.aps), brU, '#E8401C')}
-   ${brRow('Phase 1 revenue (' + fmt.int(P5.starts) + ' × ' + vM(PTH.phase1_price) + ')', brP, 'var(--ink-4)')}</div>`;
+  const sumT = `<table class="pt" style="margin-top:16px"><thead><tr><th>Where the ${vM(P5.arr)} comes from</th><th>Brands</th><th>× ARR per brand</th><th>= ARR</th></tr></thead><tbody>
+   <tr><td>Scaled brands</td><td>${fmt.int(P5.scaled)}</td><td>${vM(P5.aps)}</td><td>${vM(P5.scaled * P5.aps)}</td></tr>
+   <tr><td>Phase 1 brands (in the year)</td><td>${fmt.int(P5.starts)}</td><td>${vM(PTH.phase1_price)}</td><td>${vM(P5.starts * PTH.phase1_price)}</td></tr>
+   <tr><td><b>HeyMoon.ai ARR ${P5.y}</b></td><td></td><td></td><td><b>${vM(P5.arr)}</b></td></tr></tbody></table>
+   ${apsNow ? `<div class="sm" style="margin-top:8px">About ${Math.round(100 * P5.scaled * apsNow / (P5.scaled * P5.aps))}% of scaled-brand ARR comes from more brands at today's ${vM(apsNow)} per brand; the rest from brands spending more as they climb the ladder.</div>` : ''}`;
   const stp = (n, t, x) => `<div class="cd"><div style="font:700 13px Inter;color:#E8401C">${n}</div><h3 style="margin:2px 0 4px;font:600 16px Inter">${t}</h3><p class="sm" style="margin:0">${x}</p></div>`;
-  const pathSec = `<div class="sec"><p class="eb">Path to $100M ARR by ${P5.y} · HeyMoon.ai</p><div class="cd" style="display:grid;grid-template-columns:1.4fr 1fr;gap:28px;align-items:center">
+  const pathSec = `<div class="sec"><p class="eb">HeyMoon.ai · management plan</p><h2 class="st">Path to $100M ARR by ${P5.y}</h2><div class="cd" style="display:grid;grid-template-columns:1.4fr 1fr;gap:28px;align-items:center">
  <div>${pBars}</div>
- <div><div class="mid">${vM(P5.arr)}</div><div class="val2">HeyMoon.ai ARR in ${P5.y}</div><div class="sm" style="margin-top:8px">First milestone: ${vM(P1.arr)} ARR in ${P1.y}, from ${fmt.int(P1.starts)} Phase 1 starts on ${vM(P1.spend)} of acquisition spend, funded by this round.</div>${bridge}</div>
+ <div><div class="mid">${vM(P5.arr)}</div><div class="val2">HeyMoon.ai ARR in ${P5.y}</div><div class="sm" style="margin-top:8px">First milestone: ${vM(P1.arr)} ARR in ${P1.y}, from ${fmt.int(P1.starts)} Phase 1 starts on ${vM(P1.spend)} of acquisition spend, funded by this round.</div>${sumT}</div>
 </div>
 <div class="g3" style="margin-top:14px">
  ${stp('01', 'More Phase 1 starts', 'Acquisition spend rises from ' + vM(spQ3 != null ? spQ3 * 4 : null) + ' a year today to ' + vM(P5.spend) + ' in ' + P5.y + ', at ' + vM(P1.cac) + '–' + vM(P5.cac) + ' per start (incl. sales salaries).')}
  ${stp('02', 'Same funnel as today', vP(PTH.conv) + ' of Phase 1 brands scale and ' + vP(1 - PTH.churn) + ' of scaled brands stay each year, in line with today\'s measured rates.')}
  ${stp('03', 'Scaled brands grow', 'ARR per scaled brand rises from ' + vM(apsNow) + ' today to ' + vM(P5.aps) + ' as brands climb the ROAS ladder (NRR ' + vP(nrrQ.nrr) + ' today).')}
 </div>
-<div class="cd" style="margin-top:14px"><p class="eb">Key metrics · today vs ${P5.y}: volume grows on today's unit economics</p><table class="pt"><thead><tr><th>Metric</th><th>Today (${asOf})</th><th></th><th>${P5.y} plan</th><th></th></tr></thead><tbody>
+<div class="cd" style="margin-top:14px"><p class="eb">Key metrics · today vs ${P5.y}: volume grows on today's unit economics</p><table class="pt"><thead><tr><th>Metric</th><th>Today (${asOf})</th><th></th><th>${P5.y} plan</th><th style="text-align:left">Basis</th></tr></thead><tbody>
  ${gRow('Scale · what grows')}
  ${pRow('HeyMoon.ai ARR', vM(c.arr), vM(P5.arr))}
  ${pRow('Phase 1 starts per year', fmt.int(c.newQ * 4) + ' (run rate)', fmt.int(P5.starts))}
  ${pRow('Scaled brands', fmt.int(scaledNow), fmt.int(P5.scaled))}
  ${pRow('Acquisition spend per year', vM(spQ3 != null ? spQ3 * 4 : null) + ' (run rate)', vM(P5.spend))}
  ${pRow('HeyMoon.ai gross profit (annualised)', vM(c.arr * gm), vM(P5.arr * PTH.margin))}
- ${gRow('Unit economics · close to today, with conservative CAC and margin')}
- ${uRow('Phase 1 → scaled conversion', '~' + vP(PTH.conv), vP(PTH.conv), PTH.conv, PTH.conv, 'pts', false, 'Today\'s rate.')}
- ${uRow('Retention after Phase 1', vP(c.l2ret), vP(1 - PTH.churn), c.l2ret, 1 - PTH.churn, 'pts', false, 'Today\'s rate.')}
- ${uRow('ARR per scaled brand', vM(apsNow), vM(P5.aps), apsNow, P5.aps, null, false, 'Brands climb the ROAS ladder; NRR is ' + vP(nrrQ.nrr) + ' today.')}
- ${uRow('CAC per Phase 1 start', vM(cacL && cacL.cac) + ' (' + (cacL ? cacL.lab : '') + ')', vM(P5.cac), cacL && cacL.cac, P5.cac, null, true, 'Assumed to rise as cheaper channels fill up (conservative).')}
- ${uRow('LTV / CAC (all brands)', fmt.x(cq.ltvcac) + ' (' + qN + ')', fmt.x(P5.ltvcac), cq.ltvcac, P5.ltvcac, null, false, 'Higher CAC, and fast growth means more brands in Phase 1, where drop-off sits.')}
- ${uRow('Payback per scaled brand', fmt.mo(pbNow), fmt.mo(pbScaled), pbNow, pbScaled, null, true, 'Higher CAC, mostly offset by higher ARR per brand.')}
- ${uRow('Gross margin', vP(gm), vP(PTH.margin), gm, PTH.margin, 'pts', false, '50% assumed, below today\'s ' + vP(gm) + ' (conservative).')}
+ ${gRow('Unit economics · held at today\'s levels, or more conservative')}
+ ${uRow('Phase 1 → scaled conversion', '~' + vP(PTH.conv), vP(PTH.conv), PTH.conv, PTH.conv, 'pts', false, 'Held: ' + vP(convLo) + '–' + vP(convHi) + ' observed so far')}
+ ${uRow('Retention after Phase 1', vP(c.l2ret), vP(1 - PTH.churn), c.l2ret, 1 - PTH.churn, 'pts', false, 'Held: ' + (c.l2 - c.l2ch) + ' of ' + c.l2 + ' scaled brands retained')}
+ ${uRow('ARR per scaled brand', vM(apsNow), vM(P5.aps), apsNow, P5.aps, null, false, 'Brands have had little time to climb the ladder (launched Jan-26); top scaled brand already at ' + vM(topAps) + ', ' + nAbove + ' of ' + scPays.length + ' at ' + vM(PTH.arr_per_scaled[0]) + '+; NRR ' + vP(nrrQ.nrr))}
+ ${uRow('CAC per Phase 1 start', vM(cacL && cacL.cac) + ' (' + (cacL ? cacL.lab : '') + ')', vM(P5.cac), cacL && cacL.cac, P5.cac, null, true, 'Conservative: equal to today\'s fully loaded CAC (' + vM(c.cac) + '); assumes no efficiency gain at scale')}
+ ${uRow('LTV / CAC (all brands)', fmt.x(cq.ltvcac) + ' (' + qN + ')', fmt.x(P5.ltvcac), cq.ltvcac, P5.ltvcac, null, false, 'Lower from the conservative CAC, and fast growth adds many new Phase 1 brands')}
+ ${uRow('Payback per scaled brand', fmt.mo(pbNow), fmt.mo(pbScaled), pbNow, pbScaled, null, true, 'Higher CAC, mostly offset by higher ARR per brand')}
+ ${uRow('Gross margin', vP(gm), vP(PTH.margin), gm, PTH.margin, 'pts', false, 'Conservative: below today\'s ' + vP(gm) + ' actual')}
 </tbody></table>
-<div class="sm" style="margin-top:10px">Acquisition spend of ${vM(cumSpend)} over ${path[0].y}–${P5.y}: the first year from this round, later years from gross profit and further funding. Management plan, not a forecast.</div></div></div>`;
+<div class="sm" style="margin-top:10px">Acquisition spend of ${vM(cumSpend)} over ${path[0].y}–${P5.y}: the first year from this round, later years from gross profit and further funding. Management plan, not a forecast. Unit economics are early indicators from samples of 8–${p1Pool.length} brands.</div></div></div>`;
   const invHTML = invCss + `<div class="inv" id="inv-export">
 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px"><p class="eb" style="margin:0">Investor update · ${mL}</p><button class="btn" id="inv-dl" type="button" data-noexport>Download investor page</button></div>
 <h1>HeyMoon.ai ARR up ${arrGq != null ? Math.round(arrGq * 100) + '%' : '—'} quarter on quarter; brands that scale past Phase 1 spend ${scaledAvg ? (scaledAvg / phase1).toFixed(1) + '×' : '—'} their first campaign.</h1>
@@ -1100,7 +1105,7 @@ function renderInvestor() {
  <div class="cd hot"><p class="eb">Retention after Phase 1</p><div class="big">${vP(c.l2ret)}</div><div class="val">${c.l2 - c.l2ch} of ${c.l2} brands</div><div class="sub">annualised · brands that scaled past their first $1,000 campaign</div></div>
  <div class="cd hot"><p class="eb">Spend per scaled brand</p><div class="big">${scaledAvg ? (scaledAvg / phase1).toFixed(1) + '×' : '—'}</div><div class="val">${vM(scaledAvg)} paid on average</div><div class="sub">${vM(scaledAvg * scaled.length)} paid by ${scaled.length} brands past Phase 1, vs a $1,000 first campaign</div></div>
 </div>
-<div class="sec"><p class="eb">Unit economics · HeyMoon.ai · ${qN} vs ${qP} · early indicators, ${c.mths} months since launch</p><div class="g4">
+<div class="sec"><p class="eb">HeyMoon.ai · ${qN} vs ${qP} · early indicators, ${c.mths} months since launch</p><h2 class="st">Unit economics</h2><div class="g4">
  ${cq2('LTV / CAC', fmt.x(cq.ltvcac), gx(cq.ltvcac, pq.ltvcac), false, 'LTV ' + vM(cq.ltv) + ' (ARPA ' + vM(cq.arpa) + ' × ' + vP(NM_MARGIN) + ' ÷ ' + vP(cq.churn) + ' churn) ÷ CAC ' + vM(cq.cac) + ' (' + vM(cq.spend) + ' ÷ ' + cq.cacN + ' brands, all spend since ' + fmt.month(S.months[Math.max(0, launchK)]) + ')')}
  ${cq2('CAC payback', fmt.mo(cq.payback), (cq.payback != null && pq.payback != null) ? cq.payback - pq.payback : null, true, 'CAC ' + vM(cq.cac) + ' ÷ (ARPA ' + vM(cq.arpa) + ' × ' + vP(NM_MARGIN) + ' ÷ 12)', 'mo')}
  ${cq2('Upgrade rate', vP(cq.up), px(cq.up, pq.up), false, uq.up + ' of ' + uq.act + ' brands moved up a ROAS level in ' + qN, 'pts')}
@@ -1110,12 +1115,12 @@ function renderInvestor() {
  ${cq2('Active brands · end of ' + qN, cq.active, gx(cq.active, pq.active), false, 'incl. brands in their first campaign')}
  <div class="cd"><p class="eb">CAC · ${cacL ? cacL.lab : '—'}</p><div class="mid">${vM(cacL && cacL.cac)}</div>${cacChg != null ? `<div class="val2" style="color:${cacChg <= 0 ? '#1F8A52' : '#C0392B'}">${cacChg <= 0 ? '▲' : '▼'} ${vS(cacChg)} <span class="sm" style="font-weight:400">vs ${cacF.lab}</span></div>` : ''}<div class="sm">per new brand · ${cacQs.map(q => q.lab + ' ' + vM(q.cac)).join(' → ')}</div></div>
 </div></div>
-<div class="sec cd"><p class="eb">How brands grow on HeyMoon.ai</p><div class="steps">
+<div class="sec cd"><p class="eb">HeyMoon.ai · the model</p><h2 class="st">How brands grow</h2><div class="steps">
  <div class="step"><div class="n">01</div><h3>Phase 1: $1,000</h3><p>The same fixed first campaign for every brand. No commitment after it.</p></div>
  <div class="step"><div class="n">02</div><h3>Earn the next phase</h3><p>The next campaign is offered only when Phase 1 reaches 80% of its guaranteed sales target.</p></div>
  <div class="step"><div class="n">03</div><h3>Scale on results</h3><p>Brands move up the ROAS ladder; each level carries a larger budget. Retention after Phase 1 is ${vP(c.l2ret)}.</p></div>
 </div><div class="fact">${lostP1.length} of the ${lost.length} brands lost since launch left after Phase 1, each having paid ${vM(lostMax)} or less. ${lost.length - lostP1.length === 1 ? 'One brand has' : (lost.length - lostP1.length) + ' brands have'} been lost after scaling.</div></div>
-<div class="sec"><p class="eb">Company and funding · MoonTech</p>${raise ? '<div class="raise">' + raise + '</div>' : ''}<div class="g3">
+<div class="sec"><p class="eb">MoonTech · all businesses</p><h2 class="st">Company and funding</h2>${raise ? '<div class="raise">' + raise + '</div>' : ''}<div class="g3">
  ${cc('Total ARR', vM(tArr), vS(gx(tArr, tArrP)) + ' year on year · Commission ' + vM(tArrL) + ', HeyMoon.ai ' + vM(c.arr))}
  <div class="cd"><p class="eb">Total revenue · ${yrL} to date</p><div class="mid grn">${vS(gx(tY, tYP))}</div><div class="val2">${vM(tY)}, Jan–${fmt.month(S.months[Lk]).slice(0, 3)}</div><div class="sm">vs ${vM(tYP)} in the same months of ${+yrL - 1}</div></div>
  ${cc('Gross margin · overall', vP(gm), yrL + ' to date · Commission and HeyMoon.ai share one cost structure')}
