@@ -20,15 +20,16 @@ roas_status:                             # [§7] ladder brands
   include_as_roas: ["Jetour"]              # New Model = ROAS brands incl. Jetour (cost-per-lead), per Haseeb 5-Nov; counted as ROAS everywhere   # any Level not matching this regex = Other pricing (e.g. CPL / Jetour)
   launch_month: 2025-11                  # first ROAS signing; "since launch" periods start here [§10.5]
   exclude_from_new_model: ["Touche Prive"]   # V2 2026-11-17 (Kareem): Nov-25 pre-launch test — out of HeyMoon.ai brand counts, churn and unit economics from 2026; 2024-25 values stay frozen
-  flag_after_months_without_payment: 6   # V2 2026-11-17: not a churn rule — lists active brands with this many months without payment on Control ("update the ladder")
   direct_l2: ["Izil"]                    # V2 2026-11-16: entered at L5 with a single campaign; counts as an L2+ customer (customer retention L2+)
 
 cac:                                     # V2 2026-11-17 (Kareem): source = live CAC sheet spend; brand count from the ladder
-  brand_count: ladder_first_paid_excl_migrated   # brands that have paid (first payment month), excl. brands migrated from commission; refunded brands and Jetour count. To discuss with Haseeb (sheet counts 39 vs 41 at Oct-26)
+  brand_count: ladder_first_paid             # V2 2026-11-18 (Kareem): brands that have paid (first payment month), INCLUDING brands migrated from commission (migrations count as new clients); excluded brands (Touche Prive) out; refunded brands and Jetour count
   fallback: none                         # no fallback: a month without spend shows CAC as —
 
 investor:                                # V2 page settings (agreed with Kareem 16-17 Nov 2026); index.html reads these
-  arpa_method: average_active_3m         # ARPA = ARR ÷ average active accounts over the same 3 months, every page (replaces month-end count)
+  arpa_method: paying_customers_3m       # V2 2026-11-18 (Kareem): ARPA = ARR ÷ customers that paid >= arpa.min_paid_3m_usd in the same 3 months; every group, both businesses
+arpa:
+  min_paid_3m_usd: 250                   # a 'paying customer' paid at least this much (USD, before seasonality) in the 3-month window
   point_in_time_growth: vs_3_months_earlier
   nrr_upgrade_basis: calendar_quarter    # NRR and upgrade rate: latest complete quarter vs the one before (answers the open point in Changes post handover)
   ounass_default: added_back             # one ARR everywhere; Investor page always adds the buffer back and says the months are provisional

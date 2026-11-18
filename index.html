@@ -645,7 +645,7 @@ function sec(label, n) { return `<tr class="sec"><td colspan="${n + 1}">${label}
    The rules live in the pipeline (pipeline/config.yaml, build.py); this block only reads what the build writes.
    - HeyMoon.ai = ROAS brands incl. Jetour, excl. config roas_status.exclude_from_new_model (Touche Prive, Nov-25 pre-launch test).
    - New brand = ladder Since month (first payment; refunded brands count). Churn = ladder Churn month (engine status).
-   - ARPA = ARR ÷ average active accounts over the same 3 months, on every page.
+   - ARPA = ARR ÷ customers that paid at least $250 in the same 3 months, on every page (locked 18 Nov 2026).
    - CAC = CAC sheet spend ÷ HeyMoon.ai brands that have paid, excl. brands migrated from commission (series cac_new_brands); no fallback.
    - Investor page: point-in-time metrics at the latest month vs 3 months earlier; NRR and upgrade rate on calendar quarters. */
 const MT_ACT = ['New', 'Existing', 'Reactivated'];
@@ -679,7 +679,6 @@ function mtGaps() { const c = mtCacStatus(), g = [];
     else if (c.state === 'down') g.push({ level: 'bad', title: 'CAC sheet unreachable', detail: 'CAC, LTV/CAC and payback show — until the sheet loads (' + (c.err || 'error') + ').' });
     else { if (c.missing.length) g.push({ level: 'bad', title: 'Acquisition spend missing in the CAC sheet', detail: c.missing.map(fmt.month).join(', ') + ': CAC needs every month from launch (' + fmt.month(c.ms[0]) + ') to the update month. CAC, LTV/CAC and payback show —.' });
       if (c.diffs.length) g.push({ level: 'warn', title: 'CAC sheet brand count differs from the dashboard', detail: 'Sheet "New Clients" vs HeyMoon.ai brands first paid (excl. migrated from commission): ' + c.diffs.map(d => fmt.month(d.m) + ' ' + (d.sheet == null ? '—' : fmt.int(d.sheet)) + ' vs ' + d.ours).join(' · ') + '. Since launch: sheet ' + (c.sheet == null ? '—' : fmt.int(c.sheet)) + ' vs dashboard ' + c.ours + '. CAC uses the dashboard count. To discuss with Haseeb.' }); } }
-  ((D.review || {}).payment_gap || []).forEach(x => g.push({ level: 'warn', title: 'Update the ladder · ' + x.name, detail: x.months + ' months without payment (last paid ' + (x.last_paid ? fmt.month(x.last_paid) : 'never') + '). Still active: churn comes only from the ladder Churn month.' }));
   const cash = (M.control || {}).cash || {};
   if (cash.balance_usd != null) g.push({ level: 'warn', title: 'Cash and burn', detail: 'Cash ' + fmt.moneyFull(cash.balance_usd) + ' and burn ' + fmt.moneyFull(cash.monthly_burn_usd) + '/month as at ' + (cash.as_of || '—') + ', entered in control.json until linked.' });
   else g.push({ level: 'bad', title: 'Cash and burn', detail: 'Not in control.json: the Investor page shows n/a.' });
@@ -767,7 +766,7 @@ function computeInvestor() {
   const spendOk = ks => mtSheetSpend(mOf(ks)) != null;
   const cacCur = (cacN(cur3) && spendOk(cur3)) ? mtSheetSpend(mOf(cur3)) / cacN(cur3) : null, cacPrev = (cacN(prev3) && spendOk(prev3)) ? mtSheetSpend(mOf(prev3)) / cacN(prev3) : null;
   const AR = arpaAt(Lk, cacSL) || { n: {}, arr: {}, act: {} }, ARp3 = arpaAt(Lk - 3, cacSL) || {}, ARp12 = arpaAt(Lk - 12, cacSL) || {};
-  const nmArpa = AR.ROAS != null ? AR.ROAS : null, nmArpaPrev = ARp3.ROAS != null ? ARp3.ROAS : null;   // ARR ÷ average active brands over the same 3 months
+  const nmArpa = AR.ROAS != null ? AR.ROAS : null, nmArpaPrev = ARp3.ROAS != null ? ARp3.ROAS : null;   // ARR ÷ brands that paid >= $250 in the same 3 months
   const nmLtv = (nmArpa != null && nmLogoChurn) ? nmArpa * NM_MARGIN / nmLogoChurn : null;
   const nmLtvPrev = (nmArpaPrev != null && nmLogoChurnPrev) ? nmArpaPrev * NM_MARGIN / nmLogoChurnPrev : null;
   const nmLtvCac = (nmLtv != null && cacSL) ? nmLtv / cacSL : null;
@@ -777,7 +776,7 @@ function computeInvestor() {
   // ---- Blended (whole company)
   const blArr = latest.arr.blended, blArrPrev = S.arr_blended ? S.arr_blended[Lk - 12] : null;
   const blActive = latest.active_end.total, blActivePrev = P['M:' + S.months[Lk - 12]].active_end.total;
-  const blArpa = AR.blended != null ? AR.blended : null, blArpaPrev = ARp12.blended != null ? ARp12.blended : null;   // ARR ÷ average active accounts over the same 3 months; vs a year earlier
+  const blArpa = AR.blended != null ? AR.blended : null, blArpaPrev = ARp12.blended != null ? ARp12.blended : null;   // ARR ÷ customers that paid >= $250 in the same 3 months; vs a year earlier
   const margin = ttm.legacy_margin_ttm, marginPrev = ttmPrev && ttmPrev.legacy_margin_ttm;
   const blLtv = (blArpa != null && margin != null) ? blArpa * margin / BLENDED_CHURN : null;
   const blLtvPrev = (blArpaPrev != null && marginPrev != null) ? blArpaPrev * marginPrev / BLENDED_CHURN : null;
@@ -832,25 +831,26 @@ function computeInvestor() {
 }
 
 /* ---- ARPA: one definition across the model (agreed 16 Nov 2026).
-   ARPA = ARR ÷ average active accounts over the same 3 months as the ARR. Blended ARR includes unallocated commission.
+   ARPA = ARR ÷ customers that paid at least $250 in the same 3 months as the ARR. Blended ARR includes unallocated commission.
    HeyMoon.ai: ARR = last 3 months × 4, active brands per month (first payment to churn / refund month). Tiers use the brand's current tier. */
 function mtTierOf(b, cacSL) { if (b.tier && ['Small', 'Medium', 'Large'].includes(b.tier)) return b.tier; if (!cacSL) return null; const x = (b.paid_to_latest || 0) * 0.5 / cacSL; return x < 1 ? 'Small' : x < 2 ? 'Medium' : 'Large'; }
-function arpaAt(k, cacSL) {
+function arpaAt(k, cacSL) {   // ARPA = ARR ÷ customers that paid >= arpa.min_paid_3m_usd in the same 3 months (locked with Kareem 18 Nov 2026), both businesses
   const m = S.months[k]; const Mo = P['M:' + m]; if (!Mo || k < 0) return null;
-  const ks = [k - 2, k - 1, k].filter(j => j >= 0);
-  const o = { n: {}, arr: {}, act: {}, ks: ks.map(j => S.months[j]) };
-  const put = (g, arr, acts) => { const n = acts.length ? acts.reduce((a, v) => a + (v || 0), 0) / acts.length : 0; o[g] = (arr != null && n) ? arr / n : null; o.n[g] = n; o.arr[g] = arr; o.act[g] = acts; };
-  const segArr = sg => (Mo.arpa && Mo.arpa[sg] != null && Mo.arpa_n) ? Mo.arpa[sg] * Mo.arpa_n[sg] : (sg === 'SME' || !(Mo.arpa_n && Mo.arpa_n[sg]) ? 0 : null);
-  const at = (arr, j) => (arr && arr[j] != null) ? arr[j] : 0;
-  put('blended', S.arr_blended ? S.arr_blended[k] : null, ks.map(j => at(S.act_total, j)));
-  put('legacy', S.arr_legacy ? S.arr_legacy[k] : null, ks.map(j => at(S.act_leg, j)));
-  LEG_SEGS.forEach(sg => put(sg, segArr(sg), ks.map(j => at(S.act_leg_seg && S.act_leg_seg[sg], j))));
-  const entArr = segArr('Enterprise');
-  put('blended_ex_ent', (S.arr_blended && entArr != null) ? S.arr_blended[k] - entArr : null, ks.map(j => at(S.act_total, j) - at(S.act_leg_seg && S.act_leg_seg.Enterprise, j)));
+  const ks = [k - 2, k - 1, k].filter(j => j >= 0), THR = ((M.config || {}).arpa || {}).min_paid_3m_usd || 250;
+  const o = { n: {}, arr: {}, ks: ks.map(j => S.months[j]), thr: THR };
+  const put = (g, arr, n) => { o[g] = (arr != null && n) ? arr / n : null; o.n[g] = n; o.arr[g] = arr; };
+  const segN = sg => (Mo.arpa_n && Mo.arpa_n[sg] != null) ? Mo.arpa_n[sg] : 0;
+  const segArr = sg => (Mo.arpa && Mo.arpa[sg] != null) ? Mo.arpa[sg] * segN(sg) : (segN(sg) ? null : 0);
+  const legN = LEG_SEGS.reduce((a, sg) => a + segN(sg), 0);
+  LEG_SEGS.forEach(sg => put(sg, segArr(sg), segN(sg)));
+  put('legacy', S.arr_legacy ? S.arr_legacy[k] : null, legN);
   const nm = mtHM();
-  const grp = pred => { const mem = nm.filter(pred); const arr = mem.reduce((a, b) => a + ks.reduce((x, j) => x + (b.monthly[j] || 0), 0), 0) * 4; return [arr, ks.map(j => mtHmActiveAt(j, pred))]; };
-  let [arr, acts] = grp(() => true); put('ROAS', arr, acts);
+  const grp = pred => { const mem = nm.filter(pred); const pays = mem.map(b => ks.reduce((x, j) => x + (b.monthly[j] || 0), 0));
+    return [sum(pays) * 4, pays.filter(v => v >= THR).length]; };
+  const [hmArr, hmN] = grp(() => true); put('ROAS', hmArr, hmN);
   TIERS.forEach(t => { const [a2, n2] = grp(b => mtTierOf(b, cacSL) === t); put(t, a2, n2); });
+  put('blended', S.arr_blended ? S.arr_blended[k] : null, legN + hmN);
+  put('blended_ex_ent', (S.arr_blended && segArr('Enterprise') != null) ? S.arr_blended[k] - segArr('Enterprise') : null, legN + hmN - segN('Enterprise'));
   return o;
 }
 
@@ -914,7 +914,7 @@ function renderInvestor() {
   T += R('Logo retention', c.churn != null ? 1 - c.churn : null, pct0, px(c.churn != null ? 1 - c.churn : null, p.churn != null ? 1 - p.churn : null), 'pts', false, asOf, pye.churn != null ? 1 - pye.churn : null, 1 - py5.churn, '1 minus logo churn.', m3);
   T += R('Customer retention (L2+)', c.l2ret, pct0, null, 'na', false, asOf, null, null, `Logo retention for brands at L2 or above (${c.l2} to date: reached ladder level 2+, plus ${(mtRS().direct_l2 || []).map(esc).join(', ')} as direct entry at L5; ${c.l2 - c.l2ch} of ${c.l2} retained), annualised as for logo retention.`);
   T += R('CAC' + mtCacTag(), c.cac, fm, gx(c.cacQ, p.cacQ), 'g', true, asOf, pye.cac, py5.cac, `CAC sheet acquisition spend since launch (${fmt.month(S.months[Math.max(0, launchK)])}, incl. pre-launch) ÷ brands that have paid, excl. migrated from commission (dashboard count): ${fmt.moneyFull(c.spend)} ÷ ${c.cacN}; growth = CAC in ${w3(cW)} (${fmt.money(c.cacQ)}) vs. ${w3(pW)} (${fmt.money(p.cacQ)}).${cacNote}${diffNote}`, w3(pW));
-  T += R('ARPA', c.arpa, fm, gx(c.arpa, p.arpa), 'g', false, asOf, pye.arpa, py5.arpa, `ARR ÷ average active brands over ${w3(cW)} (${fmt.money(c.ar.arr && c.ar.arr.ROAS)} ÷ ${fmt.num(c.ar.n && c.ar.n.ROAS, 2)}: ${(c.ar.act && c.ar.act.ROAS || []).join(' / ')}); growth vs. ${m3} (${fmt.money(p.arpa)}).`, m3);
+  T += R('ARPA', c.arpa, fm, gx(c.arpa, p.arpa), 'g', false, asOf, pye.arpa, py5.arpa, `ARR ÷ brands that paid at least $250 in ${w3(cW)} (${fmt.money(c.ar.arr && c.ar.arr.ROAS)} ÷ ${fmt.num(c.ar.n && c.ar.n.ROAS, 2)}: ${(c.ar.act && c.ar.act.ROAS || []).join(' / ')}); growth vs. ${m3} (${fmt.money(p.arpa)}).`, m3);
   T += R('LTV', c.ltv, fm, gx(c.ltv, p.ltv), 'g', false, asOf, pye.ltv, py5.ltv, `ARPA × assumed margin (${fmt.pct(NM_MARGIN, 0)}) ÷ annualised logo churn; growth vs. ${m3} (${fmt.money(p.ltv)}).`, m3);
   T += R('LTV / CAC', c.ltvcac, fmt.x, gx(c.ltvcac, p.ltvcac), 'g', false, asOf, pye.ltvcac, py5.ltvcac, `LTV ÷ CAC; growth vs. ${m3} (${fmt.x(p.ltvcac)}).`, m3);
   T += R('Payback', c.payback, fmt.mo, gx(c.payback, p.payback), 'g', true, asOf, pye.payback, py5.payback, `CAC ÷ monthly gross profit per brand (ARPA × ${fmt.pct(NM_MARGIN, 0)} ÷ 12); growth vs. ${m3} (${fmt.mo(p.payback)}).`, m3);
@@ -960,7 +960,7 @@ function renderInvestor() {
     ${box('Upgrade rate · ' + qN, pct0(cq.up), chip(px(cq.up, pq.up), 'pts', false, qP), 'brands moving up 1+ ROAS level')}
     ${box('Customer retention · L2+', pct0(c.l2ret), '<div class="delta flat">' + (c.l2 - c.l2ch) + ' of ' + c.l2 + ' retained</div>', 'brands at L2 or above, annualised')}
     ${box('Logo retention', pct0(c.churn != null ? 1 - c.churn : null), chip(px(c.churn != null ? 1 - c.churn : null, p.churn != null ? 1 - p.churn : null), 'pts', false, m3), 'all brands, annualised')}
-    ${box('ARPA · HeyMoon.ai', money(c.arpa), chip(gx(c.arpa, p.arpa), 'g', false, m3), 'ARR ÷ average active brands')}
+    ${box('ARPA · HeyMoon.ai', money(c.arpa), chip(gx(c.arpa, p.arpa), 'g', false, m3), 'ARR ÷ brands that paid in the 3 months')}
     ${box('LTV / CAC' + mtCacTag(), fmt.x(c.ltvcac), chip(gx(c.ltvcac, p.ltvcac), 'g', false, m3), 'LTV ' + money(c.ltv) + ' ÷ CAC ' + money(c.cac))}
     ${box('Payback', fmt.mo(c.payback), chip(gx(c.payback, p.payback), 'g', true, m3), 'CAC ÷ monthly gross profit per brand')}
     ${box('CAC · since launch' + mtCacTag(), money(c.cac), chip(gx(c.cacQ, p.cacQ), 'g', true, w3(pW)), 'last 3 months ' + money(c.cacQ) + ' per brand')}
@@ -1046,7 +1046,8 @@ function renderInvestor() {
   const pBars = (() => { const pts = [{ l: asOf, v: c.arr, a: true }].concat(path.map(x => ({ l: String(x.y), v: x.arr }))), W = 640, H = 240, bw = 72, gp = (W - 40 - pts.length * bw) / (pts.length - 1), mxv = Math.max(...pts.map(x => x.v));
     return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="HeyMoon.ai ARR path">` + pts.map((x, i) => { const X = 20 + i * (bw + gp), hh = Math.max(2, (H - 64) * x.v / mxv), Y = H - 30 - hh;
       return `<rect x="${X.toFixed(0)}" y="${Y.toFixed(0)}" width="${bw}" height="${hh.toFixed(0)}" rx="2" fill="${i === pts.length - 1 ? '#E8401C' : x.a ? '#E8401C' : 'var(--ink)'}" opacity="${x.a ? .55 : 1}"/><text x="${(X + bw / 2).toFixed(0)}" y="${(Y - 8).toFixed(0)}" text-anchor="middle" style="font:600 13px Inter;fill:var(--ink)">${vM(x.v)}</text><text x="${(X + bw / 2).toFixed(0)}" y="${H - 10}" text-anchor="middle" style="font:12px Inter;fill:var(--ink-3)">${x.a ? x.l + ' actual' : x.l}</text>`; }).join('') + '</svg>'; })();
-  const apsNow = (() => { const sc = nm.filter(br => sinceK(br) >= 0 && sinceK(br) <= Lk && !(churnK(br) >= 0 && churnK(br) <= Lk) && maxLv(br, Lk) >= 2); return sc.length ? sum(sc.map(br => sum((br.monthly || []).slice(Lk - 2, Lk + 1)))) * 4 / sc.length : null; })();
+  const apsNow = (() => { const THR = ((M.config || {}).arpa || {}).min_paid_3m_usd || 250, sc = nm.filter(br => sinceK(br) >= 0 && sinceK(br) <= Lk && maxLv(br, Lk) >= 2), pays = sc.map(br => sum((br.monthly || []).slice(Lk - 2, Lk + 1))), n = pays.filter(v => v >= THR).length;   // same ARPA rule: scaled-brand ARR ÷ scaled brands that paid >= $250 in the 3 months
+    return n ? sum(pays) * 4 / n : null; })();
   const spQ3 = mtSheetSpend(mOf(win(qe - 2, qe))), P1 = path[0], pbNow = (cacL && cacL.cac && apsNow) ? (cacL.cac / PTH.conv) / (apsNow * (gm || PTH.margin) / 12) : null;
   const pRow = (l, a, b) => `<tr><td>${l}</td><td class="now">${a}</td><td class="ar">→</td><td><b>${b}</b></td><td></td></tr>`;
   const uRow = (l, a, b, a0, b0, kind, lower, why = '') => { let ch = '<span class="pc eq">held</span>';
@@ -1094,15 +1095,15 @@ function renderInvestor() {
 <p class="lead">HeyMoon.ai is MoonTech's outcome-priced AI agent for creator marketing, launched in January 2026. Brands start with one $1,000 campaign and scale on guaranteed results. The established Commission business funds the build.</p>
 <div class="g4">
  <div class="cd hot"><p class="eb">HeyMoon.ai ARR</p><div class="big">${vS(arrGq)}</div><div class="val">${vM(c.arr)} ARR · ${asOf}</div><div class="sub">${qN} vs ${qP} (${vM(pq.arr)} → ${vM(cq.arr)}) · ${yrL} revenue to date ${vM(c.ytd)}<br>ARR = annualised revenue run rate</div></div>
- <div class="cd hot"><p class="eb">Net revenue retention</p><div class="big">${vP(nrrQ.nrr)}</div><div class="val">${qN} vs ${qP}</div><div class="sub">${nrrQ.cohort || '—'} brands · gross revenue retention ${vP(nrrQ.grr)}</div></div>
+ <div class="cd hot"><p class="eb">Net revenue retention</p><div class="big">${vP(nrrQ.nrr)}</div><div class="val">${qN} vs ${qP}</div><div class="sub">${nrrQ.cohort || '—'} brands: ${vM(nrrQ.base)} in ${qP} → ${vM(nrrQ.now)} in ${qN} · gross revenue retention ${vP(nrrQ.grr)}</div></div>
  <div class="cd hot"><p class="eb">Retention after Phase 1</p><div class="big">${vP(c.l2ret)}</div><div class="val">${c.l2 - c.l2ch} of ${c.l2} brands</div><div class="sub">annualised · brands that scaled past their first $1,000 campaign</div></div>
- <div class="cd hot"><p class="eb">Spend per scaled brand</p><div class="big">${scaledAvg ? (scaledAvg / phase1).toFixed(1) + '×' : '—'}</div><div class="val">${vM(scaledAvg)} paid on average</div><div class="sub">${scaled.length} brands past Phase 1, vs a $1,000 first campaign</div></div>
+ <div class="cd hot"><p class="eb">Spend per scaled brand</p><div class="big">${scaledAvg ? (scaledAvg / phase1).toFixed(1) + '×' : '—'}</div><div class="val">${vM(scaledAvg)} paid on average</div><div class="sub">${vM(scaledAvg * scaled.length)} paid by ${scaled.length} brands past Phase 1, vs a $1,000 first campaign</div></div>
 </div>
 <div class="sec"><p class="eb">Unit economics · HeyMoon.ai · ${qN} vs ${qP} · early indicators, ${c.mths} months since launch</p><div class="g4">
- ${cq2('LTV / CAC', fmt.x(cq.ltvcac), gx(cq.ltvcac, pq.ltvcac), false, 'LTV ' + vM(cq.ltv) + ' ÷ CAC ' + vM(cq.cac) + ' · fully loaded: all spend since ' + fmt.month(S.months[Math.max(0, launchK)]))}
- ${cq2('CAC payback', fmt.mo(cq.payback), (cq.payback != null && pq.payback != null) ? cq.payback - pq.payback : null, true, 'months of gross profit to recover fully loaded CAC', 'mo')}
+ ${cq2('LTV / CAC', fmt.x(cq.ltvcac), gx(cq.ltvcac, pq.ltvcac), false, 'LTV ' + vM(cq.ltv) + ' (ARPA ' + vM(cq.arpa) + ' × ' + vP(NM_MARGIN) + ' ÷ ' + vP(cq.churn) + ' churn) ÷ CAC ' + vM(cq.cac) + ' (' + vM(cq.spend) + ' ÷ ' + cq.cacN + ' brands, all spend since ' + fmt.month(S.months[Math.max(0, launchK)]) + ')')}
+ ${cq2('CAC payback', fmt.mo(cq.payback), (cq.payback != null && pq.payback != null) ? cq.payback - pq.payback : null, true, 'CAC ' + vM(cq.cac) + ' ÷ (ARPA ' + vM(cq.arpa) + ' × ' + vP(NM_MARGIN) + ' ÷ 12)', 'mo')}
  ${cq2('Upgrade rate', vP(cq.up), px(cq.up, pq.up), false, uq.up + ' of ' + uq.act + ' brands moved up a ROAS level in ' + qN, 'pts')}
- ${cq2('ARPA', vM(cq.arpa), gx(cq.arpa, pq.arpa), false, 'ARR per active brand')}
+ ${cq2('ARPA', vM(cq.arpa), gx(cq.arpa, pq.arpa), false, vM(cq.ar.arr && cq.ar.arr.ROAS) + ' ARR ÷ ' + (cq.ar.n && cq.ar.n.ROAS) + ' brands that paid in ' + qN)}
 </div><div class="g3" style="margin-top:14px">
  ${cq2('New brands · ' + qN, cq.newQ, gx(cq.newQ, pq.newQ), false, cq.paid + ' brands had paid by the end of ' + qN)}
  ${cq2('Active brands · end of ' + qN, cq.active, gx(cq.active, pq.active), false, 'incl. brands in their first campaign')}
@@ -1130,9 +1131,9 @@ ${pathSec}
 <dt>Net revenue retention</dt><dd>Revenue in ${qN} from brands that paid in ${qP}, ÷ their ${qP} revenue. Calendar quarters.</dd>
 <dt>Gross revenue retention</dt><dd>As NRR, excluding expansion: revenue kept from ${qP} paying brands, capped at their ${qP} level.</dd>
 <dt>Spend per scaled brand</dt><dd>Total paid to date by the ${scaled.length} brands that moved past Phase 1 (ROAS level 2+, excluding brands migrated from Commission), ÷ ${scaled.length}, vs the $1,000 Phase 1 price.</dd>
-<dt>Retention after Phase 1</dt><dd>Annualised logo retention of brands that reached ROAS level 2 or above (one brand entered directly at a higher level and is included).</dd>
+<dt>Retention after Phase 1</dt><dd>Annualised logo retention of brands that reached ROAS level 2 or above (one brand entered directly at a higher level and is included): 1 − ${c.l2ch} lost ÷ ${c.l2} brands × 12 ÷ ${c.mths} months = ${vP(c.l2ret)}.</dd>
 <dt>Logo churn</dt><dd>All HeyMoon.ai brands: ${vP(c.churn)} annualised, most of it at the end of Phase 1.</dd>
-<dt>ARPA</dt><dd>ARR ÷ average active brands over the same 3 months.</dd>
+<dt>ARPA</dt><dd>ARR ÷ brands that paid at least $250 in the same 3 months. Example (${asOf}): ${vM(c.arr)} ÷ ${c.ar.n && c.ar.n.ROAS} paying brands = ${vM(c.arpa)}. Brands between campaigns that paid nothing in the 3 months are not counted. The same rule applies to the Commission business.</dd>
 <dt>LTV</dt><dd>ARPA × ${vP(NM_MARGIN)} gross margin ÷ annual logo churn (overall gross margin ${yrL} to date: ${vP(gm)}).</dd>
 <dt>CAC</dt><dd>Acquisition spend ÷ new brands that paid, excluding brands migrated from the Commission business. Quarterly CAC uses that quarter's spend and brands. LTV/CAC and payback use fully loaded CAC: all spend since ${fmt.monthLong(S.months[Math.max(0, launchK)])}, incl. pre-launch (${vM(c.cac)}).</dd>
 <dt>CAC payback</dt><dd>CAC ÷ monthly gross profit per brand (ARPA × ${vP(NM_MARGIN)} ÷ 12).</dd>
@@ -1141,7 +1142,7 @@ ${pathSec}
 <dt>Gross margin</dt><dd>Company gross profit ÷ revenue, Jan–${fmt.month(S.months[Lk]).slice(0, 3)} ${yrL}, from the management P&amp;L. Cost of sales includes creator payouts, materials, sales commission and freelancers.</dd>
 <dt>Path to $100M</dt><dd>Phase 1 starts = acquisition spend ÷ CAC per start; scaled brands = starts × conversion, less annual churn of scaled brands; ARR = scaled brands × ARR per scaled brand + Phase 1 revenue. LTV/CAC uses the same blended method as today, with Phase 1 drop-off counted as churn.</dd>
 <dt>Net burn</dt><dd>Average monthly net cash outflow of MoonTech (all businesses).</dd>
-<dt>Changes since last update</dt><dd>ARPA now uses average active brands; CAC is fully loaded from November 2025; one pre-launch test brand is excluded from ${yrL} metrics.</dd>
+<dt>Changes since last update</dt><dd>ARPA now divides by brands that paid in the 3 months (at least $250); CAC counts brands migrated from the Commission business as new brands; CAC is fully loaded from November 2025; one pre-launch test brand is excluded from ${yrL} metrics.</dd>
 ${prov.length ? `<dt>Provisional</dt><dd>Total company figures include an estimate for one Commission client's ${prov.map(fmt.month).join(' and ')} figures, pending final data. HeyMoon.ai figures are not affected.</dd>` : ''}
 </dl></details>
 <p class="sm" style="margin-top:20px">MoonTech · Confidential · figures in USD · data as of ${asOf}</p>
@@ -1405,7 +1406,7 @@ function renderPerformance() {
     + panel('Volume', 'Net orders, GMV and closed ads', chartCard('Net orders and closed ads · ' + y, 'pf-vol', lg([['var(--teal)', 'Net orders'], ['#8b5cf6', 'Closed ads']])) + chartCard('GMV and take rate · ' + y, 'pf-gmv', lg([['var(--coral)', 'GMV'], ['#0f766e', 'Take rate (right scale, ×)']])), volT, 'Net orders and GMV are on a net basis (BI exports). Contribution per order = (revenue − creator payouts) ÷ net orders.')
     + panel('Clients', 'Active clients and movement', chartCard('Active clients by size and tier · ' + y, 'pf-act', lg([...LEG_SEGS.map(sg => [SEG_C[sg], sg]), ...TIERS.map(t => [TIER_C[t], 'ROAS ' + t])])) + `<div class="card"><p class="eyebrow">ROAS tier moves · ${y}</p><ul class="plain">${movesHtml}</ul><div class="hairline"></div><p class="eyebrow">At risk · ${fmt.month(mk[mk.length - 1])}</p><div class="small"><span class="sw legacy"></span>Commission: ${riskL.length ? riskL.map(r => `${esc(r.name)} (${r.months})`).join(', ') : 'none'}<br><span class="sw roas"></span>ROAS: ${riskR.length ? riskR.map(r => `${esc(r.name)} (${r.months})`).join(', ') : 'none'}</div><div class="note">Numbers in brackets are consecutive quiet months.</div></div>`, cliT, (() => { const sl = P['SL']; return sl ? `Counts in this table are within ${y} (the Signed row for ${y} YTD excludes brands signed in 2025). Since the ROAS launch (${fmt.month(sl.start)}): <b>${fmt.int(sl.events.roas_signed)}</b> brands signed, ${fmt.int(sl.events.roas_churn)} churned, ${fmt.int(sl.active_end.roas)} active at ${fmt.month(sl.end)} — the same ${fmt.int(sl.events.roas_signed)} brands the ROAS Ladder page lists.` : ''; })())
     + panel('Retention and churn', 'Are clients staying and spending more?', chartCard('Commission NRR and GRR · rolling 12 months', 'pf-ret', lg([['var(--teal)', 'NRR'], ['var(--ink-3)', 'GRR']])) + chartCard('Churn events and at-risk clients · ' + y, 'pf-churn', lg([['var(--c-legacy)', 'Commission churn'], ['var(--c-roas)', 'ROAS churn'], ['#d97706', 'At risk (commission + ROAS)']])), retT, 'Churn events are detected late (up to 6 months), so recent months understate churn; the at-risk rows show what is coming.')
-    + panel('ARPA', 'Revenue per active account', chartCard('ARPA by segment · ' + y, 'pf-arpa', lg([['var(--ink)', 'Blended'], ['#64748b', 'Blended excl. Enterprise'], [SEG_C.Growth, 'Growth'], [SEG_C.SME, 'SME'], ['var(--c-roas)', 'ROAS']])) + chartCard('Enterprise ARPA · ' + y, 'pf-arpa-ent', lg([[SEG_C.Enterprise, 'Enterprise']])), arpaT, 'ARPA = ARR ÷ average active accounts over the 3 months to the period end: one definition on every page. Blended ARR includes unallocated commission; the numerator and denominator rows let you rebuild it.')
+    + panel('ARPA', 'Revenue per paying account', chartCard('ARPA by segment · ' + y, 'pf-arpa', lg([['var(--ink)', 'Blended'], ['#64748b', 'Blended excl. Enterprise'], [SEG_C.Growth, 'Growth'], [SEG_C.SME, 'SME'], ['var(--c-roas)', 'ROAS']])) + chartCard('Enterprise ARPA · ' + y, 'pf-arpa-ent', lg([[SEG_C.Enterprise, 'Enterprise']])), arpaT, 'ARPA = ARR ÷ customers that paid at least $250 in the 3 months to the period end: one definition on every page. Blended ARR includes unallocated commission; the numerator and denominator rows let you rebuild it.')
     + panel('ROAS economics', 'What it costs to acquire a ROAS brand and what it returns', chartCard('Acquisition spend and brands signed · ' + y, 'pf-cac', lg([['var(--c-roas)', 'Spend'], ['var(--ink)', 'Brands signed (right)']])) + chartCard('ROAS revenue and ARR · ' + y, 'pf-roas', lg([['var(--c-roas)', 'ROAS revenue'], ['var(--ink-3)', 'ROAS ARR']])), ecoT)
     + panel('Creators', 'The supply side', chartCard('Active, emerging and major creators · ' + y, 'pf-cre', lg([['#db2777', 'Active'], ['#f59e0b', 'Emerging'], ['var(--ink)', 'Major']])) + chartCard('Net orders and orders per active creator · ' + y, 'pf-cre2', lg([['var(--teal)', 'Net orders'], ['#db2777', 'Orders per active creator (right)']])), creT)
     + panel('Growth', 'Year on year', chartCard('Revenue YoY by model · ' + y, 'pf-gro', lg([['var(--ink)', 'Total'], ['var(--c-legacy)', 'Commission'], ['var(--c-roas)', 'ROAS']])) + chartCard('GMV and net orders YoY · ' + y, 'pf-gro2', lg([['var(--coral)', 'GMV'], ['var(--teal)', 'Net orders']])), groT)
@@ -1658,7 +1659,7 @@ function renderControl() {
       <p><b>Active commission client:</b> annualised revenue ≥ $950 and fewer than 6 consecutive months below $100. <b>Churned (commission):</b> the first month either test fails (not backdated); i.e. no longer meets the threshold ($950/yr, or 6+ quiet months).</p>
       <p><b>ROAS brand:</b> new in the month it appears on the ROAS ladder (Since month); active until the ladder marks it churned (Churn month). No revenue threshold and no payment-gap rule — the ladder is the single source. The two segments use different churn triggers by design.</p>
       <p><b>Migrated clients</b> (DKNY, Izil, Metro Brazil) are one client in one view per month — commission before their Since month, ROAS after — never counted twice.</p>
-      <p><b>ARR:</b> commission = last 3 months each ÷ its seasonality weight, averaged; ROAS = last 3 months × 4. <b>ARPA</b> (one definition everywhere, agreed 16 Nov 2026): ARR ÷ average active accounts over the same 3 months. <b>New HeyMoon.ai brand:</b> first payment; refunded brands count (new when first paid, churned when refunded); Jetour included; Touche Prive (Nov-25 pre-launch test) excluded from brand counts and unit economics. <b>HeyMoon.ai NRR and gross revenue churn:</b> calendar quarters, standard (lost + reduced).</p>
+      <p><b>ARR:</b> commission = last 3 months each ÷ its seasonality weight, averaged; ROAS = last 3 months × 4. <b>ARPA</b> (one definition everywhere, locked 18 Nov 2026): ARR ÷ customers that paid at least $250 in the same 3 months (was: ARR ÷ average active accounts over the same 3 months). <b>New HeyMoon.ai brand:</b> first payment; refunded brands count (new when first paid, churned when refunded); Jetour included; Touche Prive (Nov-25 pre-launch test) excluded from brand counts and unit economics. <b>HeyMoon.ai NRR and gross revenue churn:</b> calendar quarters, standard (lost + reduced).</p>
       <p><b>Churn rates</b> are stored monthly (unique churned ÷ average active ÷ months) and shown as 12-month churn, 1 − (1 − m)¹², with average lifetime 1 ÷ m.</p>
       <p><b>LTV</b> = ARPA ÷ 12 × margin × lifetime (capped 60 months). ROAS uses logo churn and a 50% margin; commission uses revenue churn (1 − GRR) and the actual TTM contribution margin.</p>
       <p><b>Size — commission:</b> Enterprise = annualised revenue ≥ AED 1M (exit below 500k); Growth / SME by the client's own company revenue (≥ / &lt; $50M). <b>Size — ROAS:</b> margin on what the brand has paid ÷ CAC — below 1× Small, 1× to 2× Medium, above 2× Large.</p>
@@ -1681,7 +1682,7 @@ function renderKpis() {
   const kEnd = S.months.indexOf(sel.end) >= 0 ? S.months.indexOf(sel.end) : Lk, Em = S.months[kEnd];   // the selected period's last month
   const arr = sel.arr || latest.arr;                                                                   // run-rate at the period end
   const I = computeInvestor();   // one definition per metric across the model: the Investor Metrics set
-  const AR = arpaAt(kEnd, I.cacSL) || {}; const arpaB = AR.blended;                                   // ARPA at the period end (ARR ÷ average active over the 3 months to it)
+  const AR = arpaAt(kEnd, I.cacSL) || {}; const arpaB = AR.blended;                                   // ARPA at the period end (ARR ÷ customers that paid >= $250 in the 3 months to it)
   const CAC = mtCacFor(sel);                                                                           // CAC for the selected period (CAC sheet spend ÷ dashboard brand count)
   const ltvCac = (I.nmLtv != null && CAC.cac) ? I.nmLtv / CAC.cac : null, payback = (I.nmArpa && CAC.cac) ? CAC.cac / (I.nmArpa * I.NM_MARGIN / 12) : null;
   const nrr = (sel.retention && sel.retention.legacy_12m) || ttm.retention.legacy_12m;
@@ -1699,7 +1700,7 @@ function renderKpis() {
         <div class="muted small">${addbackActive() || !M.control.ounass.provisional_months.some(m => !state.confirmed.has(m)) ? 'Buffer added back. If switched to \'held\', ARR will be below the Investor Dashboard.' : 'Buffer held: ARR is below the Investor Dashboard, which adds it back.'}</div>
         ${split2('Commission run-rate', fmt.money(arr.legacy), 'ROAS ARR', fmt.money(arr.roas))}</div>
       <div class="card block"><p class="eyebrow">ARPA · blended · ${fmt.month(Em)}</p><div class="hero">${fmt.money(arpaB)}</div>
-        <div class="muted small">ARR ${fmt.money(AR.arr ? AR.arr.blended : null)} ÷ average active accounts ${AR.ks ? fmt.month(AR.ks[0]) + '–' + fmt.month(AR.ks[AR.ks.length - 1]) : ''} (${fmt.num(AR.n ? AR.n.blended : null, 2)})</div>
+        <div class="muted small">ARR ${fmt.money(AR.arr ? AR.arr.blended : null)} ÷ ${fmt.num(AR.n ? AR.n.blended : null, 0)} customers that paid at least $250 in ${AR.ks ? fmt.month(AR.ks[0]) + '–' + fmt.month(AR.ks[AR.ks.length - 1]) : ''}</div>
         ${split2('Commission', fmt.money(AR.legacy), 'ROAS', fmt.money(AR.ROAS))}</div>
       ${card('Commission NRR · rolling 12m', fmt.pct(nrr && nrr.nrr, 0), '<div class="muted small">GRR ' + fmt.pct(nrr && nrr.grr, 0) + '</div>')}
     </div>
@@ -1748,7 +1749,7 @@ function renderSegmentation() {
     + td(ltvOf(AR.legacy, sel.ltv && sel.ltv.GrowthSME && sel.churn && sel.churn.legacy ? { margin: sel.ltv.GrowthSME.margin, lifetime: sel.churn.legacy.lifetime } : null), money) + chTd(sel.churn && sel.churn.legacy) + naCell + naCell + naCell + '</tr>';
   const commTable = `<div class="card"><p class="eyebrow">Commission · by size (Enterprise / Growth / SME)</p>
     <div class="tblwrap"><table class="t">${head('Segment')}<tbody>${commRows}${commTot}</tbody></table></div>
-    <div class="note">ARPA = ARR ÷ average active clients over the 3 months to ${fmt.month(Em)} (one definition across the model). LTV = ARPA ÷ 12 × margin × lifetime; LTV and logo churn for Growth &amp; SME are measured together. CAC, payback and LTV:CAC don't break down by segment — there is no segment-level acquisition cost — so they show n/a.</div></div>`;
+    <div class="note">ARPA = ARR ÷ clients that paid at least $250 in the 3 months to ${fmt.month(Em)} (one definition across the model). LTV = ARPA ÷ 12 × margin × lifetime; LTV and logo churn for Growth &amp; SME are measured together. CAC, payback and LTV:CAC don't break down by segment — there is no segment-level acquisition cost — so they show n/a.</div></div>`;
 
   const I = computeInvestor();   // ROAS unit economics: same definitions as the Investor Dashboard (as at the update date)
   const nmChurnOf = pred => { const paid = I.nm.filter(b => pred(b) && I.sinceK(b) >= 0 && I.sinceK(b) <= Lk); const ch = paid.filter(b => I.churnK(b) >= 0 && I.churnK(b) <= Lk); return paid.length ? { r: ch.length / paid.length * (12 / I.monthsYtd), n: ch.length, p: paid.length } : null; };
@@ -1765,7 +1766,7 @@ function renderSegmentation() {
     + td(I.cacSL, money) + td(I.nmPayback, fmt.mo) + td(I.nmLtvCac, fmt.x) + '</tr>';
   const roasTable = `<div class="card" style="margin-top:16px"><p class="eyebrow">ROAS · by tier (Small / Medium / Large)</p>
     <div class="tblwrap"><table class="t">${head('Tier', 'Logo churn (annualised)')}<tbody>${roasRows}${roasTot}</tbody></table></div>
-    <div class="note">Tiers follow the agreed CAC-payback rule: margin on what the brand has paid ÷ CAC — below 1× Small, 1–2× Medium, above 2× Large. ARPA = ARR (last 3 months × 4) ÷ average active brands over the same 3 months. LTV, CAC, payback, LTV:CAC and logo churn are only available for ROAS as a whole (total row): churned brands leave their tier, so churn by tier shows n/a.</div></div>`;
+    <div class="note">Tiers follow the agreed CAC-payback rule: margin on what the brand has paid ÷ CAC — below 1× Small, 1–2× Medium, above 2× Large. ARPA = ARR (last 3 months × 4) ÷ brands that paid at least $250 in the same 3 months. LTV, CAC, payback, LTV:CAC and logo churn are only available for ROAS as a whole (total row): churned brands leave their tier, so churn by tier shows n/a.</div></div>`;
 
   // Unified size axis — ROAS brands carry E/G/SME too (pipeline/roas_segments.csv: Kareem's segmentation file + defaults)
   const kStart = S.months.indexOf(sel.start), kEnd = S.months.indexOf(sel.end);

@@ -226,8 +226,9 @@ def build_dataset(E, ctl):
             elif s == 'Churned' and hm_k(b, k): mv['roas_churn'][k] += 1
             elif s == 'Reactivated': mv['roas_react'][k] += 1
     S['mv'] = mv
-    # V2 CAC brand count: HeyMoon.ai brands first paid in the month, excl. migrated from commission and excluded brands (config cac.brand_count)
-    S['cac_new_brands'] = [sum(1 for b in brands if E.lad[b]['since'] == k and b not in migrated_brands and b not in EXCL) for k in range(NM)]
+    # V2 CAC brand count: HeyMoon.ai brands first paid in the month, excl. excluded brands; migrated from commission count unless cac.brand_count says otherwise
+    _excl_mig = cfg.get('cac', {}).get('brand_count') == 'ladder_first_paid_excl_migrated'
+    S['cac_new_brands'] = [sum(1 for b in brands if E.lad[b]['since'] == k and not (_excl_mig and b in migrated_brands) and b not in EXCL) for k in range(NM)]
     S['tier_moves'] = {mo(k): tier_moves[k] for k in range(NF + 1) if tier_moves[k]}
     S['at_risk_leg'] = []; S['at_risk_roas'] = []
     for k in range(NF):
@@ -254,18 +255,25 @@ def build_dataset(E, ctl):
     arr_l = [E.legacy_runrate(k) if k >= 2 else None for k in range(NF)]
     S['arr_roas'] = arr_r; S['arr_legacy'] = arr_l
     S['arr_blended'] = [(arr_r[k] + arr_l[k]) if k >= 2 else None for k in range(NF)]
+    # V2 2026-11-18 (Kareem): ARPA = ARR of the group ÷ customers in the group that paid >= arpa.min_paid_3m_usd in the same 3 months
+    THR = (cfg.get('arpa') or {}).get('min_paid_3m_usd', 250)
     def leg_named_arr(k, segs):
-        Rr = N = 0.0
+        Rr = 0.0; paid = {}
         for j in range(k - 2, k + 1):
-            act = E.legacy_active(j, segs)
-            Rr += sum(E.rev[m][j] for m in act) / fx / E.w[j % 12] / 3; N += len(act) / 3
-        return Rr, N
+            for m in E.rev:
+                if E.seg[m][j] not in segs: continue
+                x = E.rev[m][j]
+                if not x: continue
+                Rr += x / fx / E.w[j % 12] / 3; paid[m] = paid.get(m, 0.0) + x / fx
+        return Rr, sum(1 for v in paid.values() if v >= THR)
     def roas_grp_arr(k, g):
-        Rr = N = 0.0
+        Rr = 0.0; paid = {}
         for j in range(k - 2, k + 1):
-            mem = roas_group(j, g); N += len(mem) / 3
-            Rr += sum(E.lad[b]['pay'][j] for b in mem) * cfg['arr']['roas_multiplier']
-        return Rr, N
+            for b in roas_group(j, g):
+                if not hm_k(b, k): continue           # excluded brands (Touche Prive) out of 2026 periods, as on the page
+                x = E.lad[b]['pay'][j]
+                Rr += x * cfg['arr']['roas_multiplier']; paid[b] = paid.get(b, 0.0) + x
+        return Rr, sum(1 for v in paid.values() if v >= THR)
     arpa = {g: [None] * NM for g in ['blended', 'blended_ex_ent', 'Enterprise', 'Growth', 'SME', 'ROAS'] + TIERS + LVL_GROUPS}
     arpa_n = {g: [None] * NM for g in arpa}
     for k in range(2, NM):
@@ -277,10 +285,11 @@ def build_dataset(E, ctl):
                 rr, n = leg_named_arr(k, [s]); arpa[s][k] = rr / n if n else None; arpa_n[s][k] = n
                 tot_r += rr; tot_n += n
             rr, n = roas_grp_arr(k, 'ROAS')
-            arpa['blended'][k] = (tot_r + rr) / (tot_n + n) if tot_n + n else None; arpa_n['blended'][k] = tot_n + n
+            # blended numerator = headline company ARR (incl. unallocated commission), so blended ARPA = ARR ÷ paying customers (18 Nov 2026)
+            arpa['blended'][k] = S['arr_blended'][k] / (tot_n + n) if (tot_n + n) and S['arr_blended'][k] is not None else None; arpa_n['blended'][k] = tot_n + n
             er, en = leg_named_arr(k, ['Enterprise'])
             d = tot_n + n - en
-            arpa['blended_ex_ent'][k] = (tot_r + rr - er) / d if d else None; arpa_n['blended_ex_ent'][k] = d
+            arpa['blended_ex_ent'][k] = (S['arr_blended'][k] - er) / d if d and S['arr_blended'][k] is not None else None; arpa_n['blended_ex_ent'][k] = d
     S['arpa'] = arpa; S['arpa_n'] = arpa_n
     S['benchmark_large'] = bench; S['benchmark_seg'] = bench_seg; S['cac_sl'] = cac_sl
     S['ent_share'] = [(S['rev_leg_seg']['Enterprise'][k] / S['rev_named'][k]) if S['rev_named'][k] else None for k in range(NF)]
@@ -581,21 +590,7 @@ def build_dataset(E, ctl):
     return {'series': S, 'periods': periods, 'annualised': ann, 'cohorts': {'roas': roas_cohorts, 'legacy': leg_cohorts},
             'merchants': merchants, 'roas_brands': roas_tbl, 'weights': E.w,
             'review': {'new_names': E.review, 'creator_id_flags': E.id_flags, 'r2_churned': [b for b in brands if E.lad[b]['churn'] is None and any(E.rst[b][k] == 'Churned' for k in range(NM))],
-                       'low_confidence': [m for m, v in E.master.items() if v.get('status') != 'Confirmed'],
-                       'payment_gap': payment_gap(E, brands, EXCL, L, cfg)}}
-
-def payment_gap(E, brands, EXCL, L, cfg):
-    """V2 (2026-11-17): active HeyMoon.ai brands with N+ months without payment at the update month. A flag for the ladder, not a churn rule."""
-    N = cfg['roas_status'].get('flag_after_months_without_payment')
-    if not N: return []
-    k = L; out = []                                   # the update month
-    for b in brands:
-        if b in EXCL or E.rst[b][k] not in ACT: continue
-        paid = [j for j in range(k + 1) if E.lad[b]['pay'][j] > 0]
-        last = paid[-1] if paid else E.lad[b]['since']
-        gap = k - last
-        if gap >= N: out.append({'name': b, 'last_paid': mo(paid[-1]) if paid else None, 'months': gap})
-    return out
+                       'low_confidence': [m for m, v in E.master.items() if v.get('status') != 'Confirmed']}}
 
 # ----------------------------------------------------------------------------- scenarios + checks
 def run_checks(E, kit, ds=None):
@@ -625,14 +620,13 @@ def v2_checks(ds):
     act = lambda k: sum(1 for b in hm if sinceK(b) <= k and not (churnK(b) is not None and churnK(b) <= k))
     ks = range(L - 2, L + 1)
     arr = sum(b['monthly'][k] or 0 for b in hm for k in ks) * 4
-    avg = sum(act(k) for k in ks) / 3
+    payers = sum(1 for b in hm if sum(b['monthly'][k] or 0 for k in ks) >= 250)   # ARPA: customers that paid >= $250 in the 3 months
     qe = L if L % 3 == 2 else L - (L % 3) - 1
     q1 = range(qe - 2, qe + 1); q0 = range(qe - 5, qe - 2)
     base = sum(sum(b['monthly'][k] or 0 for k in q0) for b in hm if sum(b['monthly'][k] or 0 for k in q0) > 0)
     now = sum(sum(b['monthly'][k] or 0 for k in q1) for b in hm if sum(b['monthly'][k] or 0 for k in q0) > 0)
-    return {'V01': len(paid), 'V02': len(churned), 'V03': act(L), 'V04': arr, 'V05': arr / avg if avg else None,
-            'V06': sum(S['cac_new_brands'][k] for k in range(LAUNCH, L + 1)), 'V07': now / base * 100 if base else None,
-            'V08': len(ds['review'].get('payment_gap', []))}
+    return {'V01': len(paid), 'V02': len(churned), 'V03': act(L), 'V04': arr, 'V05': arr / payers if payers else None,
+            'V06': sum(S['cac_new_brands'][k] for k in range(LAUNCH, L + 1)), 'V07': now / base * 100 if base else None}
 
 def make_engine(kit, ctl, addback):
     _patched_load.control = ctl; _patched_load.addback = set(addback)

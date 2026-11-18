@@ -46,7 +46,6 @@ V01,V2,HeyMoon.ai brands that have paid since launch (excl. Touche Prive),Nov-25
 V02,V2,HeyMoon.ai brands churned since launch (excl. Touche Prive),Nov-25 to Oct-26,HeyMoon.ai,13,13,brands,0,V2 definitions 2026-11-17: regression check
 V03,V2,Active HeyMoon.ai brands (incl. Jetour),Oct-26,HeyMoon.ai,30,30,brands,0,V2 definitions 2026-11-17: regression check
 V04,V2,HeyMoon.ai ARR (last 3 months x 4),Oct-26,HeyMoon.ai,238000,238000,USD,1,V2 definitions 2026-11-17: regression check
-V05,V2,HeyMoon.ai ARPA (ARR / average active over 3 months),Oct-26,HeyMoon.ai,8707.32,8707.32,USD,0.5,V2 definitions 2026-11-17: regression check
-V06,V2,CAC brand count since launch (first paid excl. migrated from commission),Nov-25 to Oct-26,HeyMoon.ai,41,41,brands,0,V2 definitions 2026-11-17: regression check; to discuss with Haseeb (CAC sheet count)
+V05,V2,HeyMoon.ai ARPA (ARR / brands that paid >= $250 in the 3 months),Oct-26,HeyMoon.ai,9916.67,9916.67,USD,0.5,V2 definitions 2026-11-18 (Kareem): ARPA on paying customers
+V06,V2,CAC brand count since launch (first paid incl. migrated from commission; Touche Prive out),Nov-25 to Oct-26,HeyMoon.ai,43,43,brands,0,V2 definitions 2026-11-18 (Kareem): migrations count as new clients
 V07,V2,HeyMoon.ai NRR (calendar quarters),Q3-26 vs Q2-26,HeyMoon.ai,137.07,137.07,%,0.05,V2 definitions 2026-11-16: regression check
-V08,V2,Active brands flagged 6+ months without payment,Oct-26,HeyMoon.ai,1,1,brands,0,V2 definitions 2026-11-17: flag for the ladder (not churn)
