@@ -26,6 +26,7 @@ Build: 51/51 checks (43 engine + 8 V2 regression checks), 2024–25 lock intact.
 | Date | Area | Change | Effect (Oct-26) |
 |---|---|---|---|
 | 17-Nov-26 | Pipeline | `config.yaml`: `exclude_from_new_model`, `flag_after_months_without_payment`, `direct_l2`, `cac`, `investor`, `plan` sections. `build.py`: Touche Prive out of 2026 churn events; series `cac_new_brands`; brand fields `hm_excluded`, `last_paid`; review list `payment_gap`; 8 V2 checks (V01–V08). `control.json`: cash. | Since launch: 43 paid, 13 churned (was 44 / 14). 51/51 checks; 2024–25 locked. |
+| 18-Nov-26 | Investor page | New standalone `investor.html`: aggregate figures only, no client names, values fixed at Oct-26 (no live sheets). Not linked from the dashboard. | ARR +231% Q3 vs Q2; NRR 137% (GRR 61%); retention after Phase 1 88%; 7.9x spend per scaled brand. |
 | 17-Nov-26 | Dashboard | Haseeb's 17-Nov `index.html` taken as the base; V2 page changes re-applied (3-way merge): naming, ARPA, CAC (`mtCacFor`), Investor page, Ounass default + provisional callout, data-gaps panel on Control, tier logo churn n/a, toggle hidden on Investor. In-page rules layer removed. | Contract check: no missing data fields; live-sheet links identical; changed contract functions are the V2 decisions above. |
 
 ## Kept as in the reference (not changed)
@@ -35,6 +36,6 @@ Build: 51/51 checks (43 engine + 8 V2 regression checks), 2024–25 lock intact.
 
 ## To discuss with Haseeb
 
-1. **CAC brand count.** The CAC sheet counts 39 new brands since launch at Oct-26; the ladder shows 43 that have paid (excl. Touche Prive), 41 excluding the two migrated from commission (DKNY, Izil). Is the gap migrated brands, refunds (Pure N Bio, Alma Home) and Jetour? V2 uses 41; the sheet should take the dashboard's count.
+1. **CAC brand count.** The CAC sheet counts 44 new clients since launch at Oct-26; the dashboard uses 41 (rule C). The gap is Touche Prive (pre-launch test), DKNY and Izil (migrated from commission). Should the sheet take the dashboard's count? (Corrects an earlier note that said 39.)
 2. **Hosting.** The repo is public and `data.json` / `pipeline/history_base.json` carry client revenue by name; the README marks the model confidential.
 3. **Touche Prive 2025 history** stays in the frozen ROAS history (2024–25 lock); only 2026 metrics exclude it.
