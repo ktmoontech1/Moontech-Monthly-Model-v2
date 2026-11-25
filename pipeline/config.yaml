@@ -28,6 +28,15 @@ cac:                                     # V2 2026-11-17 (Kareem): source = live
 
 investor:                                # V2 page settings (agreed with Kareem 16-17 Nov 2026); index.html reads these
   arpa_method: paying_customers_3m       # V2 2026-11-18 (Kareem): ARPA = ARR ÷ customers that paid >= arpa.min_paid_3m_usd in the same 3 months; every group, both businesses
+  path:                                  # V2 2026-11-25 (Kareem): HeyMoon.ai funnel plan (option B, 18 Nov); read by the Investor tab (path to $100M) and the HeyMoon.ai page (2027 targets)
+    years: [2027, 2028, 2029, 2030]
+    spend: [720000, 3000000, 7200000, 14600000]   # acquisition spend per year, USD
+    cac: [2000, 2200, 2400, 2600]                 # CAC per Phase 1 start, USD
+    conv: 0.30                                    # share of Phase 1 starts that scale to level 2+
+    churn: 0.12                                   # annual churn of scaled brands
+    arr_per_scaled: [24000, 27000, 31000, 35000]  # ARR per scaled brand, USD
+    phase1_price: 1000                            # Phase 1 revenue per start, USD
+    margin: 0.50                                  # gross margin used for LTV and payback
 arpa:
   min_paid_3m_usd: 250                   # a 'paying customer' paid at least this much (USD, before seasonality) in the 3-month window
   point_in_time_growth: vs_3_months_earlier
