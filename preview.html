@@ -555,9 +555,9 @@ function showPage() {
   ctl.querySelector('#ctl-finwrap').style.display = onFin ? '' : 'none';
   ctl.querySelector('#ctl-perfwrap').style.display = onPerf ? '' : 'none';
   ctl.querySelector('#ctl-year').parentElement.style.display = ((onFin && state.finView === 'monthly') || (onPerf && state.perfView === 'trends')) ? '' : 'none';
-  ctl.querySelector('#ctl-periodwrap').style.display = (state.page === 'kpis' || state.page === 'segmentation') ? '' : 'none';
+  ctl.querySelector('#ctl-periodwrap').style.display = (state.page === 'kpis' || state.page === 'segmentation' || state.page === 'heymoon') ? '' : 'none';
   // Segmented / Company-wide only where commission and ROAS can be shown separately: not on Client Segmentation, Control, Investor, or the live 2026 P&L
-  ctl.querySelector('#ctl-view').parentElement.style.display = (state.page === 'segmentation' || state.page === 'control' || state.page === 'investor' || (onFin && state.finView === 'pnl2026')) ? 'none' : '';
+  ctl.querySelector('#ctl-view').parentElement.style.display = (state.page === 'segmentation' || state.page === 'control' || state.page === 'investor' || state.page === 'heymoon' || (onFin && state.finView === 'pnl2026')) ? 'none' : '';
   { const bw = ctl.querySelector('#ctl-buffer'); if (bw && bw.parentElement) bw.parentElement.style.display = state.page === 'investor' ? 'none' : ''; }   // investor metrics always add the Ounass buffer back
   try { renderFlags(); } catch (e) {}
   if (onFin) ['pnl2026', 'annual', 'monthly'].forEach(v => { const el = document.getElementById('fin-' + v); if (el) el.style.display = v === state.finView ? '' : 'none'; });
@@ -594,7 +594,7 @@ function barChart(el, cfg) {
   mx = niceMax(mx); mn = mn < 0 ? -niceMax(-mn) : 0;
   const y = v => pt + ih - (v - mn) / (mx - mn) * ih, bw = iw / n, barW = Math.min(cfg.width ? 40 : 24, bw * 0.62);
   let g = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="aspect-ratio:${W}/${H}">`;
-  const ticks = 4; g += '<g class="grid">';
+  const ticks = cfg.ticks || 4; g += '<g class="grid">';
   for (let t = 0; t <= ticks; t++) { const v = mn + (mx - mn) * t / ticks, yy = y(v); g += `<line x1="${pl}" x2="${W - pr}" y1="${yy}" y2="${yy}"/><text x="${pl - 6}" y="${yy + 3.5}" text-anchor="end">${tickFmt(v, kind)}</text>`;
     if (cfg.right) { const rv = cfg.right.min + (cfg.right.max - cfg.right.min) * (v - mn) / (mx - mn); g += `<text x="${W - pr + 6}" y="${yy + 3.5}" text-anchor="start" fill="${cfg.right.color || 'currentColor'}">${tickFmt(rv, cfg.right.kind)}</text>`; } }
   g += '</g>';
@@ -1014,7 +1014,9 @@ function renderInvestor() {
   const upN = (k0, k1) => { let act = 0, up = 0; nm.forEach(br => { const sk = sinceK(br), ck = churnK(br); if (sk < 0 || sk > k1 || (ck >= 0 && ck < k0) || !br.level_monthly) return; act++; const l0 = sk < k0 ? (br.level_monthly[k0 - 1] || 0) : 1, l1 = br.level_monthly[k1] || 0; if (l1 > l0) up++; }); return { act, up }; };
   const uq = upN(qe - 2, qe);
   // brands that scaled past Phase 1 (ROAS level 2+), excl. migrated from Commission: average paid to date
-  const scaled = nm.filter(br => !br.migrated && sinceK(br) >= 0 && sinceK(br) <= Lk && maxLv(br, Lk) >= 2);
+  // Phase 1 route (25 Nov): every brand that started on Phase 1, incl. migrated brands that started at L1 (DKNY); direct entries (migrated, entered above L1 without Phase 1) excluded
+  const invDirect = br => (mtRS().direct_l2 || []).includes(br.name) || (br.migrated && ((br.level_monthly || [])[sinceK(br)] || 0) >= 2);
+  const scaled = nm.filter(br => !invDirect(br) && sinceK(br) >= 0 && sinceK(br) <= Lk && maxLv(br, Lk) >= 2);
   const scaledAvg = scaled.length ? sum(scaled.map(br => paidTo(br, Lk))) / scaled.length : null, phase1 = 1000;
   // churn split: at Phase 1 vs after scaling
   const lost = nm.filter(br => churnK(br) >= 0 && churnK(br) <= Lk), lostP1 = lost.filter(br => maxLv(br, Lk) < 2), lostMax = lostP1.length ? Math.max(...lostP1.map(br => paidTo(br, Lk))) : 0;
@@ -1061,7 +1063,7 @@ function renderInvestor() {
   // evidence for the Basis column (all from today's data)
   const scPays = nm.filter(br => sinceK(br) >= 0 && sinceK(br) <= Lk && maxLv(br, Lk) >= 2).map(br => sum((br.monthly || []).slice(Lk - 2, Lk + 1)) * 4).filter(v => v > 0);
   const topAps = scPays.length ? Math.max(...scPays) : null, nAbove = scPays.filter(v => v >= PTH.arr_per_scaled[0]).length;
-  const p1Pool = nm.filter(br => !br.migrated && sinceK(br) >= 0 && sinceK(br) <= Lk - 2), p1Sc = p1Pool.filter(br => maxLv(br, Lk) >= 2).length;
+  const p1Pool = nm.filter(br => !invDirect(br) && sinceK(br) >= 0 && sinceK(br) <= Lk - 2), p1Sc = p1Pool.filter(br => maxLv(br, Lk) >= 2).length;
   const convLo = p1Pool.length ? p1Sc / p1Pool.length : null, convHi = (scaled.length + lostP1.length) ? scaled.length / (scaled.length + lostP1.length) : null;
   const gRow = t => `<tr class="grp"><td colspan="5">${t}</td></tr>`;
   // where the 2030 ARR comes from: brand count at today's ARR per brand, ARR per brand uplift, Phase 1 revenue
@@ -1114,7 +1116,7 @@ function renderInvestor() {
  ${cq2('ARPA', vM(cq.arpa), gx(cq.arpa, pq.arpa), false, vM(cq.ar.arr && cq.ar.arr.ROAS) + ' ARR ÷ ' + (cq.ar.n && cq.ar.n.ROAS) + ' brands that paid in ' + qN)}
 </div><div class="g3" style="margin-top:14px">
  ${cq2('New brands · ' + qN, cq.newQ, gx(cq.newQ, pq.newQ), false, cq.paid + ' brands had paid by the end of ' + qN)}
- ${cq2('Active brands · end of ' + qN, cq.active, gx(cq.active, pq.active), false, 'incl. brands in their first campaign')}
+ ${cq2('Active brands · end of ' + qN, cq.active, gx(cq.active, pq.active), false, cq.active + ' active at end of ' + qN + ': ' + (cq.ar.n && cq.ar.n.ROAS) + ' paid in the quarter (used for ARPA), ' + (cq.active - ((cq.ar.n && cq.ar.n.ROAS) || 0)) + ' between campaigns or yet to renew')}
  ${cq2('CAC · ' + (cacL ? cacL.lab : '—'), vM(cacL && cacL.cac), cacChg, true, 'per new brand · ' + cacQs.map(q => q.lab + ' ' + vM(q.cac)).join(' → ') + (cacChgF != null ? ' (' + vS(cacChgF) + ' since ' + cacF.lab + ')' : ''))}
 </div></div>
 <div class="sec cd"><p class="eb">HeyMoon.ai · the model</p><h2 class="st">How brands grow</h2><div class="steps">
@@ -1139,8 +1141,8 @@ ${pathSec}
 <dt>ARR growth</dt><dd>${qN} run rate vs ${qP} run rate (each quarter's revenue × 4). Calendar quarters, as for NRR.</dd>
 <dt>Net revenue retention</dt><dd>Revenue in ${qN} from brands that paid in ${qP}, ÷ their ${qP} revenue. Calendar quarters.</dd>
 <dt>Gross revenue retention</dt><dd>As NRR, excluding expansion: revenue kept from ${qP} paying brands, capped at their ${qP} level.</dd>
-<dt>Spend per scaled brand</dt><dd>Total paid to date by the ${scaled.length} brands that moved past Phase 1 (ROAS level 2+, excluding brands migrated from Commission), ÷ ${scaled.length}, vs the $1,000 Phase 1 price.</dd>
-<dt>Brand counts</dt><dd>${c.l2} brands have reached Phase 2 or above since launch: ${scaled.length} that started on Phase 1 and ${c.l2 - scaled.length} migrated from the Commission business (one entered directly at a higher level). ${c.l2 - c.l2ch} are still active (retention). Spend per scaled brand covers the ${scaled.length} that started on Phase 1, since migrated brands skipped it. The ${P5.y} plan starts from the ${scaledNow} active scaled brands.</dd>
+<dt>Spend per scaled brand</dt><dd>Total paid to date by the ${scaled.length} brands that started on Phase 1 and moved past it (ROAS level 2+, incl. brands migrated from Commission that started at L1), ÷ ${scaled.length}, vs the $1,000 Phase 1 price.</dd>
+<dt>Brand counts</dt><dd>${c.l2} brands have reached Phase 2 or above since launch: ${scaled.length} that started on Phase 1 (incl. brands migrated from the Commission business that started at L1) and ${c.l2 - scaled.length} that entered directly at a higher level after migrating. ${c.l2 - c.l2ch} are still active (retention). Spend per scaled brand covers the ${scaled.length} that started on Phase 1; a direct entry never paid for a Phase 1. The ${P5.y} plan starts from the ${scaledNow} active scaled brands.</dd>
 <dt>Retention after Phase 1</dt><dd>Annualised logo retention of brands that reached ROAS level 2 or above (one brand entered directly at a higher level and is included): 1 − ${c.l2ch} lost ÷ ${c.l2} brands × 12 ÷ ${c.mths} months = ${vP(c.l2ret)}.</dd>
 <dt>Logo churn</dt><dd>All HeyMoon.ai brands, annualised: ${vP(cq.churn)} to ${qEndLab} (used for LTV in the unit economics) and ${vP(c.churn)} to ${asOf}. Most of it at the end of Phase 1.</dd>
 <dt>ARPA</dt><dd>ARR ÷ brands that paid at least $250 in the same 3 months. Example (${asOf}): ${vM(c.arr)} ÷ ${c.ar.n && c.ar.n.ROAS} paying brands = ${vM(c.arpa)}. Brands between campaigns that paid nothing in the 3 months are not counted. The same rule applies to the Commission business.</dd>
@@ -1169,6 +1171,167 @@ ${prov.length ? `<dt>Provisional</dt><dd>Total company figures include an estima
   root.querySelectorAll('#cash-bal,#cash-fund,#cash-burn,#cash-asof').forEach(el => el.addEventListener('change', () => {
     state.cash = { balance_usd: document.getElementById('cash-bal').value, secured_funding_usd: document.getElementById('cash-fund').value, monthly_burn_usd: document.getElementById('cash-burn').value, as_of: document.getElementById('cash-asof').value };
     LS('mm.cash', JSON.stringify(state.cash)); renderInvestor(); }));
+}
+
+/* ============================================================ HeyMoon.ai Summary (first draft, 25 Nov 2026; spec agreed with Kareem) */
+const HM_PATH = { years: [2027, 2028, 2029, 2030], spend: [720000, 3000000, 7200000, 14600000], cac: [2000, 2200, 2400, 2600], conv: 0.30, churn: 0.12, arr_per_scaled: [24000, 27000, 31000, 35000], phase1_price: 1000 };
+function renderHeyMoon() {
+  const root = document.getElementById('page-heymoon'); if (!root) return;
+  const I = computeInvestor(); const { nm, sum, win, sinceK, churnK, paidBy, churnedBy, activeAt, nmRev, nmRet, upgrade, launchK, NM_MARGIN } = I;
+  const Lk = L(), per = P[state.period] || P['TTM:' + M.latest_month];
+  const k0 = mtMonthK(per.start), k1 = Math.min(mtMonthK(per.end), Lk), n = k1 - k0 + 1, pk1 = k0 - 1, pk0 = k0 - n;
+  const mOf = ks => ks.map(k => S.months[k]), lab = k => fmt.month(S.months[k]), rng = (a, b) => a === b ? lab(a) : lab(a) + '–' + lab(b);
+  const THR = ((M.config || {}).arpa || {}).min_paid_3m_usd || 250, DIRECT = (mtRS().direct_l2 || []);
+  const vM = x => { if (x == null || isNaN(x)) return '—'; const a = Math.abs(x); return a >= 1e6 ? '$' + (x / 1e6).toFixed(2) + 'M' : a >= 1e4 ? '$' + Math.round(x / 1e3) + 'k' : a >= 1e3 ? '$' + (x / 1e3).toFixed(1) + 'k' : '$' + Math.round(x); };
+  const vP = (x, d = 0) => x == null || isNaN(x) ? '—' : (x * 100).toFixed(d) + '%';
+  const lvl = (br, k) => Math.max(0, ...(br.level_monthly || []).slice(0, k + 1).map(v => v || 0));
+  // entry route (agreed 25 Nov): entry level = ladder level in the first paid month (config direct_l2 brands count as direct until the ladder shows their real entry level)
+  // brands that start at L2+ in their first month went L1 -> L2 within the month (Kareem, 25 Nov): Phase 1 starts. Direct entry = migrated from Commission and entered above L1 without a Phase 1
+  const entryLvl = br => (DIRECT.includes(br.name) || (br.migrated && ((br.level_monthly || [])[sinceK(br)] || 0) >= 2)) ? Math.max(2, (br.level_monthly || [])[sinceK(br)] || 0) : 1;
+  const isDirect = br => entryLvl(br) >= 2;
+  const isScaled = (br, k) => DIRECT.includes(br.name) || lvl(br, k) >= 2;
+  const live = (br, k) => sinceK(br) >= 0 && sinceK(br) <= k && !(churnK(br) >= 0 && churnK(br) <= k);
+  const paid3 = (br, k) => sum([k - 2, k - 1, k].filter(j => j >= 0).map(j => br.monthly[j] || 0));
+  const w3 = k => win(Math.max(0, k - 2), k);
+  // ---- metrics at a month end (point in time) or over a window
+  const M_ = k => {
+    if (k < 0) return null;
+    const mths = k - mtMonthK(S.months[k].slice(0, 4) + '-01') + 1;
+    const paid = paidBy(k).length, ch = churnedBy(k).length, churn = paid ? ch / paid * (12 / mths) : null;
+    const ar = arpaAt(k, null) || {}, arpa = ar.ROAS, payN = ar.n ? ar.n.ROAS : null;
+    const scaledLive = nm.filter(br => live(br, k) && isScaled(br, k)), sp = scaledLive.map(br => paid3(br, k)), spN = sp.filter(v => v >= THR).length;
+    const aps = spN ? sum(sp) * 4 / spN : null;
+    const L2 = nm.filter(br => sinceK(br) >= 0 && sinceK(br) <= k && isScaled(br, k)), L2ch = L2.filter(br => churnK(br) >= 0 && churnK(br) <= k);
+    const p1 = nm.filter(br => !isDirect(br) && sinceK(br) >= 0 && sinceK(br) <= k), p1Sc = p1.filter(br => isScaled(br, k));
+    const p1Lost = p1.filter(br => !isScaled(br, k) && churnK(br) >= 0 && churnK(br) <= k);
+    const pool = p1.filter(br => sinceK(br) <= k - 2), convLo = pool.length ? pool.filter(br => isScaled(br, k)).length / pool.length : null;
+    const convHi = (p1Sc.length + p1Lost.length) ? p1Sc.length / (p1Sc.length + p1Lost.length) : null;
+    const spm = p1Sc.length ? sum(p1Sc.map(br => sum((br.monthly || []).slice(0, k + 1)))) / p1Sc.length / 1000 : null;
+    const fl = win(Math.max(0, launchK), k), flSp = mtSheetSpend(mOf(fl)), flN = mtCacCount(mOf(fl)), flCac = (flSp != null && flN) ? flSp / flN : null;
+    const ltv = (arpa != null && churn) ? arpa * NM_MARGIN / churn : null;
+    return { k, arr: nmRev(w3(k)) * 4, active: activeAt(k), payN, scaled: scaledLive.length, arpa, ar, aps, spN, l2: L2.length, l2ch: L2ch.length,
+      ret: L2.length ? 1 - L2ch.length / L2.length * (12 / mths) : null, churn, convLo, convHi, spm, p1n: p1Sc.length, flCac, flSp, flN, ltv,
+      ltvcac: (ltv && flCac) ? ltv / flCac : null, payback: (flCac && arpa) ? flCac / (arpa * NM_MARGIN / 12) : null };
+  };
+  const W_ = (a, b) => {   // flows over a window a..b
+    if (a < 0) return null;
+    const ks = win(a, b), ew = (b - a + 1) < 3 ? w3(b) : ks, ewP = ew.map(k => k - ew.length);
+    const starts = nm.filter(br => !isDirect(br) && ks.includes(sinceK(br))).length, mig = nm.filter(br => !isDirect(br) && br.migrated && ks.includes(sinceK(br))).length, dir = nm.filter(br => isDirect(br) && ks.includes(sinceK(br))).length;
+    const csp = mtSheetSpend(mOf(ew)), cn = mtCacCount(mOf(ew)), cac = (csp != null && cn) ? csp / cn : null;
+    const u = (() => { let act = 0, up = 0; nm.forEach(br => { const sk = sinceK(br), ck = churnK(br); if (sk < 0 || sk > ew[ew.length - 1] || (ck >= 0 && ck < ew[0]) || !br.level_monthly) return; act++; const l0 = sk < ew[0] ? (br.level_monthly[ew[0] - 1] || 0) : entryLvl(br), l1 = br.level_monthly[ew[ew.length - 1]] || 0; if (l1 > l0) up++; }); return { act, up, rate: act ? up / act : null }; })();
+    const nrr = ewP[0] >= 0 ? nmRet(ewP, ew) : null;
+    return { rev: nmRev(ks), starts, mig, dir, cac, csp, cn, ew, up: u, nrr };
+  };
+  const c = M_(k1), p = M_(pk1), w = W_(k0, k1), wp = W_(pk0, pk1);
+  // ---- formatting helpers
+  const dN = (a, b) => (a == null || b == null) ? '' : `<div class="val2" style="color:${a - b > 0 ? '#1F8A52' : a - b < 0 ? '#C0392B' : 'var(--ink-3)'}">${a - b > 0 ? '▲ +' : a - b < 0 ? '▼ −' : '■ '}${Math.abs(a - b)} <span class="sm" style="font-weight:400">vs ${pLab}</span></div>`;
+  const dG = (a, b, lower, kind, vsL) => { if (a == null || b == null || (kind !== 'pts' && !b)) return ''; const d = kind === 'pts' ? a - b : a / b - 1, good = lower ? d <= 0 : d >= 0;
+    const t = kind === 'pts' ? (d >= 0 ? '+' : '−') + Math.abs(d * 100).toFixed(0) + ' pts' : (d >= 0 ? '+' : '−') + Math.abs(d * 100).toFixed(0) + '%';
+    return `<div class="val2" style="color:${good ? '#1F8A52' : '#C0392B'}">${d >= 0 ? '▲' : '▼'} ${t} <span class="sm" style="font-weight:400">vs ${vsL || pLab}</span></div>`; };
+  const wLab = x => x ? rng(x.ew[0], x.ew[x.ew.length - 1]) : '—';
+  const pLab = pk1 >= 0 ? (n === 1 ? lab(pk1) : rng(pk0, pk1)) : '—', cLab = n === 1 ? lab(k1) : rng(k0, k1);
+  const hot = (l, v, ch, s) => `<div class="cd hot" style="min-height:0"><p class="eb">${l}</p><div class="mid" style="color:#fff">${v}</div>${(ch || '').replace(/color:#1F8A52|color:#C0392B|color:var\(--ink-3\)/g, 'color:#fff').replace(/class="sm" style="font-weight:400"/g, 'style="font-weight:400;font-size:12.5px;color:rgba(255,255,255,.85)"')}${s ? '<div class="sub" style="margin-top:4px">' + s + '</div>' : ''}</div>`;
+  const tile = (l, v, ch, s) => `<div class="cd"><p class="eb">${l}</p><div class="mid">${v}</div>${ch || ''}${s ? '<div class="sm">' + s + '</div>' : ''}</div>`;
+  // ---- plan line (2027 targets, same funnel as the Investor plan)
+  const plan = (() => { let s = c.scaled; const i = 0, st = HM_PATH.spend[i] / HM_PATH.cac[i], nw = st * HM_PATH.conv; s = s * (1 - HM_PATH.churn) + nw * (1 - HM_PATH.churn / 2); return { y: HM_PATH.years[i], starts: st, scaled: s, arr: s * HM_PATH.arr_per_scaled[i] + st * HM_PATH.phase1_price }; })();
+  const runRate = W_(Math.max(0, Lk - 2), Lk).starts * 4, paceR = plan.starts ? runRate / plan.starts : null;
+  const paceCol = paceR == null ? '#E8401C' : paceR >= 1 ? '#1F8A52' : paceR >= 0.5 ? '#B07218' : '#C0392B', paceBg = paceR == null ? 'var(--card)' : paceR >= 1 ? 'rgba(31,138,82,.08)' : paceR >= 0.5 ? 'rgba(176,114,24,.10)' : 'rgba(192,57,43,.08)';
+  // ---- funnel: brands that started Phase 1 in the period, where they are now
+  const coh = nm.filter(br => !isDirect(br) && sinceK(br) >= k0 && sinceK(br) <= k1), cohMig = coh.filter(br => br.migrated), cohDir = nm.filter(br => isDirect(br) && sinceK(br) >= k0 && sinceK(br) <= k1);
+  const dirAct = cohDir.filter(br => !(churnK(br) >= 0 && churnK(br) <= Lk)).length;
+  const fS = coh.filter(br => isScaled(br, Lk) && !(churnK(br) >= 0 && churnK(br) <= Lk)), fLS = coh.filter(br => isScaled(br, Lk) && churnK(br) >= 0 && churnK(br) <= Lk);
+  const fLP = coh.filter(br => !isScaled(br, Lk) && churnK(br) >= 0 && churnK(br) <= Lk), fP = coh.filter(br => !isScaled(br, Lk) && !(churnK(br) >= 0 && churnK(br) <= Lk));
+  const fPr = fP.filter(br => Lk - sinceK(br) < 3), fPo = fP.filter(br => Lk - sinceK(br) >= 3);
+  const fRow = (l, a, col) => `<tr><td><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${col};margin-right:8px"></i>${l}</td><td>${a.length}</td><td>${coh.length ? vP(a.length / coh.length) : '—'}</td></tr>`;
+  const segs = [[fS, '#1F8A52'], [fLS, '#8A5A12'], [fPr, '#E8401C'], [fPo, '#F0997B'], [fLP, 'var(--ink-3)']];
+  const fBar = coh.length ? `<div style="display:flex;height:14px;border-radius:3px;overflow:hidden;margin:6px 0 12px">${segs.map(([a, col]) => a.length ? `<i style="flex:${a.length};background:${col}"></i>` : '').join('')}</div>` : '';
+  // ---- watch list: active brands with 3+ quiet months at the latest month
+  const lastPaid = br => { for (let k = Lk; k >= 0; k--) if ((br.monthly[k] || 0) > 0) return k; return -1; };
+  const watch = nm.filter(br => live(br, Lk)).map(br => ({ br, lp: lastPaid(br) })).filter(x => x.lp >= 0 && Lk - x.lp >= 3)
+    .map(x => ({ name: x.br.name, sc: isScaled(x.br, Lk), lvl: lvl(x.br, Lk), lp: x.lp, q: Lk - x.lp, paid: sum((x.br.monthly || []).slice(0, Lk + 1)) }))
+    .sort((a, b) => (b.sc - a.sc) || (b.q - a.q) || a.name.localeCompare(b.name));
+  const hmLg = arr => '<div class="sm" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:6px">' + arr.map(([col, t]) => `<span><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${col};margin-right:6px"></i>${t}</span>`).join('') + '</div>';
+  // ---- ladder snapshot at the latest month: live brands by current ROAS level, ARR, moves up in the period
+  const curL = br => DIRECT.includes(br.name) && ((br.level_monthly || [])[Lk] || 0) < 2 ? 'D' : Math.max(1, (br.level_monthly || [])[Lk] || 1);
+  const movedUp = br => { const sk = sinceK(br); if (sk > k1 || !br.level_monthly) return false; const l0 = sk < k0 ? (br.level_monthly[k0 - 1] || 0) : entryLvl(br), l1 = br.level_monthly[k1] || 0; return l1 > l0; };
+  const liveNow = nm.filter(br => live(br, Lk)), arrNow = sum(liveNow.map(br => paid3(br, Lk))) * 4;
+  const groups = [['L1 (Phase 1)', br => curL(br) === 1], ['L2', br => curL(br) === 2], ['L3', br => curL(br) === 3], ['L4+', br => typeof curL(br) === 'number' && curL(br) >= 4], ['Direct entry (migrated)', br => curL(br) === 'D']];
+  const ladRows = groups.map(([l, f]) => { const g = liveNow.filter(f); const a = sum(g.map(br => paid3(br, Lk))) * 4; return g.length ? `<tr><td>${l}</td><td>${g.length}</td><td>${vM(a)}</td><td>${arrNow ? vP(a / arrNow) : '—'}</td><td>${g.filter(movedUp).length || ''}</td></tr>` : ''; }).join('');
+  const css = `<style>.hm .fun td,.hm .fun th{padding:7px 10px;border-bottom:1px solid var(--rule);text-align:right;font-size:13.5px}.hm .fun td:first-child,.hm .fun th:first-child{text-align:left}.hm .fun th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600}.hm .strip{display:flex;gap:28px;flex-wrap:wrap;margin-top:12px;padding:12px 18px;background:var(--card);border:1px solid var(--rule);border-radius:4px;font-size:13px;color:var(--ink-2)}.hm .strip b{color:var(--ink)}.hm .plan{border-left:3px solid #E8401C;background:var(--card);padding:12px 18px;margin-top:14px;font-size:14px}.hm .g2c{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}@media(max-width:900px){.hm .g2c{grid-template-columns:1fr}}</style>`;
+  root.innerHTML = css + `<div class="inv hm">
+<p class="eb" style="margin:0">HeyMoon.ai · summary · draft</p><h1 style="margin-top:4px">HeyMoon.ai · ${per.label || cLab}</h1>
+<p class="lead">Period from the header. Each figure is compared with the previous period of the same length (${pLab}). Year-on-year comparisons switch on from Jan-27.</p>
+<div class="sec" style="margin-top:8px"><h2 class="st">Growth</h2><div class="g4">
+ ${hot('ARR · ' + lab(k1), vM(c.arr), p ? dG(c.arr, p.arr) : '', 'Revenue in ' + cLab + ': ' + vM(w.rev) + ' · ARR = last 3 months × 4')}
+ ${hot('Active brands · ' + lab(k1), c.active + ' <span style="font-size:20px;color:rgba(255,255,255,.85)">· ' + (c.payN != null ? c.payN : '—') + ' paying</span>', p ? dN(c.active, p.active) : '', 'Active per the ladder (CSM); paying = paid at least $' + THR + ' in the last 3 months')}
+ ${hot('Phase 1 starts · ' + cLab, w.starts, wp ? dN(w.starts, wp.starts) : '', (w.mig ? 'incl. ' + w.mig + ' migrated from Commission · ' : '') + (w.dir ? '+ ' + w.dir + ' direct entry · ' : '') + paidBy(k1).filter(br => !isDirect(br)).length + ' since launch')}
+ ${hot('Scaled brands · ' + lab(k1), c.scaled, p ? dN(c.scaled, p.scaled) : '', 'Active at ladder level 2+ (incl. direct entry)')}
+</div></div>
+<div class="plan" style="border-left-color:${paceCol};background:${paceBg}"><b>Plan for ${plan.y}:</b> ${fmt.int(plan.starts)} Phase 1 starts, about ${fmt.int(plan.scaled)} scaled brands, ${vM(plan.arr)} ARR by year end. <b>Today:</b> ${fmt.int(runRate)} starts a year (run rate), ${c.scaled} scaled brands, ${vM(c.arr)} ARR. That needs about ${fmt.int(plan.starts / 12)} Phase 1 starts a month; the last 3 months averaged ${(runRate / 12).toFixed(0)}.</div>
+<div class="sec"><h2 class="st">Economics</h2><div class="g4">
+ ${tile('CAC · ' + rng(w.ew[0], w.ew[w.ew.length - 1]), vM(w.cac), wp ? dG(w.cac, wp.cac, true, null, wLab(wp)) : '', vM(w.csp) + ' ÷ ' + (w.cn || 0) + ' new brands' + (n < 3 ? ' · last 3 months (one month is too noisy)' : ''))}
+ ${tile('Phase 1 → scaled · to ' + lab(k1), vP(c.convLo) + '–' + vP(c.convHi), '', c.p1n + ' scaled of brands that started on Phase 1; low = all started 2+ months ago, high = only brands whose Phase 1 has ended')}
+ ${tile('Upgrade rate · ' + rng(w.ew[0], w.ew[w.ew.length - 1]), vP(w.up.rate), wp ? dG(w.up.rate, wp.up.rate, false, 'pts', wLab(wp)) : '', w.up.up + ' of ' + w.up.act + ' brands moved up a ROAS level')}
+ ${tile('Retention after Phase 1 · to ' + lab(k1), vP(c.ret), p ? dG(c.ret, p.ret, false, 'pts') : '', (c.l2 - c.l2ch) + ' of ' + c.l2 + ' scaled brands retained, annualised · logo churn (all brands) ' + vP(c.churn))}
+</div><div class="g4" style="margin-top:14px">
+ ${tile('ARPA · ' + lab(k1), vM(c.arpa), p ? dG(c.arpa, p.arpa) : '', vM(c.ar.arr && c.ar.arr.ROAS) + ' ARR ÷ ' + (c.payN || 0) + ' paying brands')}
+ ${tile('ARR per scaled brand · ' + lab(k1), vM(c.aps), p ? dG(c.aps, p.aps) : '', 'Scaled-brand ARR ÷ ' + c.spN + ' scaled brands that paid in the last 3 months')}
+ ${tile('Spend per scaled brand · to ' + lab(k1), c.spm != null ? c.spm.toFixed(1) + '×' : '—', p ? dG(c.spm, p.spm) : '', 'Average paid to date by the ' + c.p1n + ' brands that scaled from Phase 1, vs the $1,000 Phase 1')}
+ ${tile('NRR · ' + (w.nrr ? rng(w.ew[0], w.ew[w.ew.length - 1]) : '—'), vP(w.nrr && w.nrr.nrr), wp && wp.nrr && w.nrr ? dG(w.nrr.nrr, wp.nrr.nrr, false, 'pts', wLab(wp)) : '', w.nrr ? 'GRR ' + vP(w.nrr.grr) + ' · ' + w.nrr.cohort + ' brands: ' + vM(w.nrr.base) + ' → ' + vM(w.nrr.now) : 'Needs a prior window')}
+</div>
+<div class="strip"><span>LTV <b>${vM(c.ltv)}</b> (ARPA × ${vP(NM_MARGIN)} ÷ ${vP(c.churn)} churn)</span><span>Fully loaded CAC <b>${vM(c.flCac)}</b> (${vM(c.flSp)} ÷ ${c.flN} brands since ${lab(Math.max(0, launchK))})</span><span>LTV / CAC <b>${fmt.x(c.ltvcac)}</b></span><span>Payback <b>${fmt.mo(c.payback)}</b></span></div></div>
+<div class="sec"><h2 class="st">Funnel · brands that started Phase 1 in ${cLab}, where they are now</h2><div class="cd">${fBar}
+<table class="fun" style="width:100%;border-collapse:collapse"><thead><tr><th>Stage (at ${lab(Lk)})</th><th>Brands</th><th>Share</th></tr></thead><tbody>
+${fRow('Scaled, still active', fS, '#1F8A52')}${fRow('Scaled, then lost', fLS, '#8A5A12')}${fRow('In Phase 1, started in the last 3 months', fPr, '#E8401C')}${fRow('In Phase 1 for 3+ months', fPo, '#F0997B')}${fRow('Lost at Phase 1', fLP, 'var(--ink-3)')}
+<tr><td><b>Started on Phase 1</b>${cohMig.length ? ' <span class="sm">(incl. ' + cohMig.length + ' migrated from Commission)</span>' : ''}</td><td><b>${coh.length}</b></td><td></td></tr>
+${cohDir.length ? `<tr><td style="padding-top:14px"><b>Direct entry</b> <span class="sm">(entered at level 2+ without Phase 1; counted as scaled)</span></td><td style="padding-top:14px">${cohDir.length}</td><td style="padding-top:14px">${dirAct} active</td></tr>` : ''}</tbody></table>
+<div class="sm" style="margin-top:8px">Direct entry = a brand migrated from Commission that started above L1 without a Phase 1. Brands that reach L2 within their first month did Phase 1 and moved up in the same month, so they count as Phase 1 starts. Pick a longer period (YTD, 12 months) for the full picture; recent starts have not had time to scale.</div></div></div>
+<div class="sec"><h2 class="st">Ladder · where today's brands sit (${lab(Lk)})</h2><div class="cd">
+<table class="fun" style="width:100%;border-collapse:collapse"><thead><tr><th>ROAS ladder level</th><th>Active brands</th><th>ARR</th><th>Share of ARR</th><th>Moved up in ${cLab}</th></tr></thead><tbody>${ladRows}
+<tr><td><b>Total</b></td><td><b>${liveNow.length}</b></td><td><b>${vM(arrNow)}</b></td><td>100%</td><td><b>${liveNow.filter(movedUp).length || ''}</b></td></tr></tbody></table>
+<div class="sm" style="margin-top:8px">ARR by level = each brand's last 3 months × 4. "Moved up" = brands whose level rose during the period, counted at their current level. Full detail on the <a href="#" data-goto="ladder">ROAS Ladder</a>.</div></div></div>
+<div class="sec"><h2 class="st">Trends</h2><div class="g2c">
+ <div class="cd"><p class="eb">Revenue and ARR by month</p><div class="chart" id="hm-c1"></div>${hmLg([['var(--c-roas)','Revenue'],['var(--ink)','ARR (right axis)']])}</div>
+ <div class="cd"><p class="eb">Acquisition spend and Phase 1 starts by month</p><div class="chart" id="hm-c2"></div>${hmLg([['var(--c-roas)','Acquisition spend'],['var(--ink)','Phase 1 starts (right axis)']])}</div>
+ <div class="cd"><p class="eb">Active, paying and scaled brands</p><div class="chart" id="hm-c3"></div>${hmLg([['var(--ink)','Active'],['var(--c-roas)','Paying (3 months)'],['#1F8A52','Scaled']])}</div>
+ <div class="cd"><p class="eb">Revenue: brands in their first quarter vs older brands</p><div class="chart" id="hm-c4"></div>${hmLg([['#F0997B','Brands in their first quarter'],['var(--c-roas)','Older brands']])}</div>
+</div></div>
+<div class="sec"><h2 class="st">Watch list · 3+ months without a payment (${lab(Lk)})</h2><div class="cd">
+${watch.length ? `<table class="fun" style="width:100%;border-collapse:collapse"><thead><tr><th>Brand</th><th>Stage</th><th>Last paid</th><th>Quiet months</th><th>Paid to date</th></tr></thead><tbody>${watch.map(x => `<tr><td>${esc(x.name)}</td><td>${x.sc ? (x.lvl >= 2 ? 'Scaled (L' + x.lvl + ')' : 'Scaled (direct entry)') : 'Phase 1'}</td><td>${lab(x.lp)}</td><td>${x.q}</td><td>${vM(x.paid)}</td></tr>`).join('')}</tbody></table>` : '<div class="sm">No brands with 3+ quiet months.</div>'}
+<div class="sm" style="margin-top:8px">A prompt for the CSM conversation; the CSM decides who has churned. Not used in any metric.</div></div></div>
+<details><summary>Definitions</summary><dl>
+<dt>ARR</dt><dd>Revenue in the last 3 months × 4 (annualised run rate). HeyMoon.ai is priced per campaign.</dd>
+<dt>Active / paying</dt><dd>Active = live on the ROAS ladder (the CSM records churn). Paying = paid at least $${THR} in the last 3 months; used for ARPA.</dd>
+<dt>Phase 1 starts</dt><dd>Brands whose first payment falls in the period and who entered at ladder level 1, including brands migrated from the Commission business that started at L1. Brands entering at level 2 or above are direct entries, counted as scaled from day one.</dd>
+<dt>Scaled brand</dt><dd>Reached ROAS ladder level 2 or above, or entered directly at a higher level (one migrated brand).</dd>
+<dt>CAC</dt><dd>CAC sheet spend ÷ new brands that paid (migrations count). For a single month, the last 3 months are used. Fully loaded CAC = all spend since ${fmt.monthLong(S.months[Math.max(0, launchK)])} incl. pre-launch.</dd>
+<dt>Phase 1 → scaled</dt><dd>Low end: scaled ÷ all brands that started on Phase 1 at least 2 months ago. High end: scaled ÷ brands whose Phase 1 has ended (scaled or lost).</dd>
+<dt>Upgrade rate</dt><dd>Brands moving up one or more ROAS levels in the window ÷ brands active in it (window = the period, or the last 3 months for a single month).</dd>
+<dt>Retention after Phase 1</dt><dd>1 − scaled brands lost ÷ scaled brands, annualised over the months of the year. Logo churn = all brands lost ÷ all brands that have paid, annualised.</dd>
+<dt>ARPA</dt><dd>ARR ÷ brands that paid at least $${THR} in the same 3 months.</dd>
+<dt>ARR per scaled brand</dt><dd>Revenue from scaled brands in the last 3 months × 4 ÷ scaled brands that paid at least $${THR} in those months.</dd>
+<dt>Spend per scaled brand</dt><dd>Average total paid to date by brands that scaled from Phase 1 (incl. migrated brands that started at L1), divided by the $1,000 Phase 1 price.</dd>
+<dt>NRR / GRR</dt><dd>Revenue in the window from brands that paid in the window before, ÷ what they paid then; GRR caps each brand at its earlier level.</dd>
+<dt>LTV, payback</dt><dd>LTV = ARPA × ${vP(NM_MARGIN)} margin ÷ logo churn. Payback = fully loaded CAC ÷ (ARPA × ${vP(NM_MARGIN)} ÷ 12).</dd>
+<dt>Plan</dt><dd>${plan.y} targets from the Investor tab's funnel plan (acquisition spend ÷ CAC → Phase 1 starts → 30% scale → 12% churn → ARR per scaled brand).</dd>
+</dl></details>
+<p class="sm" style="margin-top:16px">All brands: <a href="#" data-goto="ladder">ROAS Ladder</a> · spend detail: <a href="#" data-goto="cac">CAC</a></p>
+</div>`;
+  root.querySelectorAll('[data-goto]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); const b = document.querySelector('#tabs button[data-page="' + a.dataset.goto + '"]'); if (b) b.click(); }));
+  // ---- charts: the period, or the last 12 months if the period is shorter than 6 months
+  try {
+    const ce = Math.min(k1, Lk), cs = n >= 6 ? k0 : Math.max(mtMonthK('2026-01'), ce - 11), ks = win(cs, ce), labs = ks.map(k => fmt.month(S.months[k])), full = ks.map(k => fmt.monthLong(S.months[k]));
+    // two axes with round tick values on both sides (4 intervals); the line is drawn on the bar scale and labelled on the right
+    const niceStep = (v, int, t = 4) => { const raw = v / t; if (raw <= 0) return 1; const p = Math.pow(10, Math.floor(Math.log10(raw))); const s = [1, 1.5, 2, 2.5, 3, 4, 5, 6, 7.5, 8, 10].map(m => m * p).find(x => x >= raw) || 10 * p; return int ? Math.max(1, Math.ceil(s)) : s; };
+    const dual = (id, bar, line, rk) => { const el = document.getElementById(id); if (!el) return; const bmax = Math.max(1, ...bar.values.map(x => x || 0)), lmax = Math.max(1, ...line.values.map(x => x || 0));
+      const lTop = niceMax(bmax), lm = lTop / Math.pow(10, Math.floor(Math.log10(lTop))), tk = (lm === 2.5 || lm === 5) ? 5 : 4, rTop = niceStep(lmax, rk === 'num', tk) * tk;
+      barChart(el, { labels: labs, fullLabels: full, kind: 'money', stacked: false, height: 200, labelEvery: 1, minVal: 0, ticks: tk, series: [bar, { name: '', color: 'transparent', values: labs.map((_, i) => i === 0 ? 0 : null) }], lines: [{ name: line.name, color: line.color, values: line.values.map(x => x == null ? null : x / rTop * lTop) }, { name: '', color: 'transparent', values: labs.map(() => lTop) }], right: { min: 0, max: rTop, kind: rk, color: 'var(--ink)' } }); };
+    dual('hm-c1', { name: 'Revenue', color: 'var(--c-roas)', values: ks.map(k => nmRev([k])) }, { name: 'ARR (right)', color: 'var(--ink)', values: ks.map(k => nmRev(w3(k)) * 4) }, 'money');
+    dual('hm-c2', { name: 'Acquisition spend', color: 'var(--c-roas)', values: ks.map(k => mtSheetSpend([S.months[k]])) }, { name: 'Phase 1 starts (right)', color: 'var(--ink)', values: ks.map(k => nm.filter(br => !isDirect(br) && sinceK(br) === k).length) }, 'num');
+
+    lineChart(document.getElementById('hm-c3'), { labels: labs, fullLabels: full, kind: 'num', series: [{ name: 'Active', color: 'var(--ink)', values: ks.map(k => activeAt(k)) }, { name: 'Paying (3 months)', color: 'var(--c-roas)', values: ks.map(k => (arpaAt(k, null) || { n: {} }).n.ROAS) }, { name: 'Scaled', color: '#1F8A52', values: ks.map(k => nm.filter(br => live(br, k) && isScaled(br, k)).length) }], height: 200, labelEvery: 1 });
+    barChart(document.getElementById('hm-c4'), { labels: labs, fullLabels: full, stacked: true, series: [{ name: 'Brands in their first quarter', color: '#F0997B', values: ks.map(k => sum(nm.filter(br => sinceK(br) >= 0 && k - sinceK(br) < 3).map(br => br.monthly[k] || 0))) }, { name: 'Older brands', color: 'var(--c-roas)', values: ks.map(k => sum(nm.filter(br => sinceK(br) >= 0 && k - sinceK(br) >= 3).map(br => br.monthly[k] || 0))) }], height: 200, labelEvery: 1 });
+  } catch (e) { console.error(e); }
 }
 
 function renderAnnual() {
