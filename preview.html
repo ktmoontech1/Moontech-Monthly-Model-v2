@@ -259,6 +259,7 @@ footer{border-top:1px solid var(--rule);padding:18px 0 40px;font-size:11.5px;col
       </button>
     </div>
     <nav class="tabs" id="tabs">
+      <button data-page="overview"><span class="n">00</span>Management summary (draft)</button>
       <button data-page="kpis" class="active"><span class="n">01</span>KPIs</button>
       <button data-page="investor"><span class="n">02</span>Investor Dashboard</button>
       <button data-page="heymoon"><span class="n">02b</span>HeyMoon.ai (draft)</button>
@@ -300,6 +301,7 @@ footer{border-top:1px solid var(--rule);padding:18px 0 40px;font-size:11.5px;col
   </section>
   <section class="page" id="page-segmentation"></section>
   <section class="page" id="page-investor"></section>
+  <section class="page" id="page-overview"></section>
   <section class="page" id="page-heymoon"></section>
   <section class="page" id="page-commission"></section>
   <section class="page" id="page-commclients"></section>
@@ -551,10 +553,12 @@ function bindUI() {
   document.getElementById('theme').addEventListener('click', () => { const cur = document.documentElement.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); const nx = cur === 'dark' ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', nx); LS('mm.theme', nx); renderAll(); });
   showPage();
 }
-const PAGES = ['kpis', 'investor', 'heymoon', 'commission', 'commclients', 'creators', 'financials', 'performance', 'segmentation', 'ladder', 'cac', 'control'];
+const PAGES = ['overview', 'kpis', 'investor', 'heymoon', 'commission', 'commclients', 'creators', 'financials', 'performance', 'segmentation', 'ladder', 'cac', 'control'];
 function showPage() {
   if (!PAGES.includes(state.page)) state.page = 'kpis';
   // HeyMoon.ai page opens on the latest complete quarter (agreed 25 Nov 2026), once per visit and only if the period is still the default 12 months
+  if (state.page === 'overview' && !state.ovDefaulted) { state.ovDefaulted = true; const L_ = M.latest_month, y = +L_.slice(0, 4), m = +L_.slice(5, 7), q = Math.floor(m / 3), key = q ? 'Q:' + y + '-Q' + q : 'Q:' + (y - 1) + '-Q4';
+    if (state.period === 'TTM:' + L_ && ensurePeriod(key)) setPeriod(key); }   // management summary opens on the latest complete quarter (26 Nov, Kareem)
   if (state.page === 'heymoon' && !state.hmDefaulted) { state.hmDefaulted = true; const L_ = M.latest_month, y = +L_.slice(0, 4), m = +L_.slice(5, 7), q = Math.floor(m / 3), key = q ? 'Q:' + y + '-Q' + q : 'Q:' + (y - 1) + '-Q4';
     if (state.period === 'TTM:' + L_ && ensurePeriod(key)) setPeriod(key); }
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.page === state.page));
@@ -566,9 +570,9 @@ function showPage() {
   ctl.querySelector('#ctl-finwrap').style.display = onFin ? '' : 'none';
   ctl.querySelector('#ctl-perfwrap').style.display = onPerf ? '' : 'none';
   ctl.querySelector('#ctl-year').parentElement.style.display = ((onFin && state.finView === 'monthly') || (onPerf && state.perfView === 'trends')) ? '' : 'none';
-  ctl.querySelector('#ctl-periodwrap').style.display = (state.page === 'kpis' || state.page === 'segmentation' || state.page === 'heymoon' || state.page === 'commission' || state.page === 'creators') ? '' : 'none';
+  ctl.querySelector('#ctl-periodwrap').style.display = (state.page === 'kpis' || state.page === 'segmentation' || state.page === 'heymoon' || state.page === 'commission' || state.page === 'creators' || state.page === 'overview') ? '' : 'none';
   // Segmented / Company-wide only where commission and ROAS can be shown separately: not on Client Segmentation, Control, Investor, or the live 2026 P&L
-  ctl.querySelector('#ctl-view').parentElement.style.display = (state.page === 'segmentation' || state.page === 'control' || state.page === 'investor' || state.page === 'heymoon' || state.page === 'commission' || state.page === 'commclients' || state.page === 'creators' || (onFin && state.finView === 'pnl2026')) ? 'none' : '';
+  ctl.querySelector('#ctl-view').parentElement.style.display = (state.page === 'segmentation' || state.page === 'control' || state.page === 'investor' || state.page === 'heymoon' || state.page === 'commission' || state.page === 'commclients' || state.page === 'creators' || state.page === 'overview' || (onFin && state.finView === 'pnl2026')) ? 'none' : '';
   { const bw = ctl.querySelector('#ctl-buffer'); if (bw && bw.parentElement) bw.parentElement.style.display = state.page === 'investor' ? 'none' : ''; }   // investor metrics always add the Ounass buffer back
   try { renderFlags(); } catch (e) {}
   if (onFin) ['pnl2026', 'annual', 'monthly'].forEach(v => { const el = document.getElementById('fin-' + v); if (el) el.style.display = v === state.finView ? '' : 'none'; });
@@ -584,7 +588,7 @@ function renderFlags() {
   document.getElementById('flagbar').innerHTML = f.join('');
   mtCheckPill();
 }
-function renderAll() { if (!ensurePeriod(state.period)) state.period = 'TTM:' + M.latest_month; document.querySelectorAll("section.page").forEach(x => x.dataset.view = state.view); renderFlags(); renderKpis(); renderInvestor(); renderHeyMoon(); renderCommission(); renderCommClients(); renderCreators(); renderAnnual(); renderMonthly(); renderPerformance(); renderActuals(); renderSegmentation(); renderControl(); }
+function renderAll() { if (!ensurePeriod(state.period)) state.period = 'TTM:' + M.latest_month; document.querySelectorAll("section.page").forEach(x => x.dataset.view = state.view); renderFlags(); renderKpis(); renderInvestor(); renderHeyMoon(); renderOverview(); renderCommission(); renderCommClients(); renderCreators(); renderAnnual(); renderMonthly(); renderPerformance(); renderActuals(); renderSegmentation(); renderControl(); }
 
 /* ============================================================ charts (inline SVG) */
 const tipEl = document.getElementById('tip');
@@ -1633,6 +1637,158 @@ ${tbl(`<th>Creator</th><th style="text-align:left">Status</th><th>Net orders · 
       tip: i => `<div class="t">${full[i]}</div><div class="r">Active <b>${vN(C.active[ks[i]])}</b></div><div class="r">Emerging <b>${vN(C.emerging[ks[i]])}</b></div><div class="r">Pool <b>${vN(pool[i])}</b></div><div class="r">Active % of pool <b>${vP(shr[i])}</b></div>` });
     barChart(document.getElementById('cr-c2'), { labels: labs, fullLabels: full, kind: 'num', stacked: true, height: 200, labelEvery: 2, ticks: 3, series: [{ name: 'New active + back', color: '#1F8A52', values: ks.map(k => (C.first_active[k] || 0) + (C.react[k] || 0)) }, { name: 'Churned', color: '#C0392B', values: ks.map(k => -(C.churned[k] || 0)) }] });
   } catch (e) { console.error(e); }
+}
+
+/* ============================================================ Management summary (draft, 26 Nov 2026): company strip · HeyMoon.ai / Commission / Creators columns · needs attention · full scorecard collapsed */
+function renderOverview() {
+  const root = document.getElementById('page-overview'); if (!root) return;
+  const Lk = L(), per = P[state.period] || P['M:' + M.latest_month];
+  const k0 = mtMonthK(per.start), k1 = Math.min(mtMonthK(per.end), Lk), n = k1 - k0 + 1, ly0 = k0 - 12, ly1 = k1 - 12;
+  const sumA = a => a.reduce((s, v) => s + (v || 0), 0), win = (a, b) => { const o = []; for (let k = a; k <= b; k++) o.push(k); return o; }, sumK = (arr, a, b) => a < 0 || !arr ? null : sumA(arr.slice(a, b + 1));
+  const lab = k => fmt.month(S.months[k]), rng = mtRangeLab, vM = x => fmt.money(x), vN = x => x == null ? '—' : fmt.int(x), vP = (x, d = 0) => x == null || isNaN(x) ? '—' : (x * 100).toFixed(d) + '%';
+  const cLab = rng(k0, k1), lyLab = ly0 >= 0 ? rng(ly0, ly1) : '—';
+  const I = computeInvestor(), H = hmModel(I), CM = commModel(), CR = (D.series || {}).creators || S.creators;
+  // ---- red / amber / green (agreed 26 Nov): vs plan where a target exists (HeyMoon.ai 2027 plan pace), otherwise vs last year (HeyMoon.ai: vs previous quarter); hard lines for runway and NRR; grey when the base is under 10 brands
+  const SMALL = 10;
+  const ragCmp = (a, b, lower) => { if (a == null || b == null || !b) return null; const d = lower ? (b - a) / Math.abs(b) : (a - b) / Math.abs(b); return d >= 0 ? 'g' : d >= -0.1 ? 'a' : 'r'; };
+  const ragNrr = x => x == null ? null : x >= 1.1 ? 'g' : x >= 1 ? 'a' : 'r', ragRunway = x => x == null ? null : x >= 12 ? 'g' : x >= 6 ? 'a' : 'r';
+  const RC = { g: '#1F8A52', a: '#D99A1E', r: '#C0392B' };
+  const dot = r => r ? `<span title="${{ g: 'on track', a: 'watch', r: 'off track' }[r]}" style="display:inline-block;width:11px;height:11px;border-radius:50%;background:${RC[r]}"></span>` : '<span title="no colour: small base or no comparison" style="display:inline-block;width:11px;height:11px;border-radius:50%;border:1.5px solid var(--ink-3)"></span>';
+  const chg = (a, b, kind) => (a == null || b == null) ? '—' : kind === 'pts' ? ((a - b) >= 0 ? '+' : '−') + Math.abs((a - b) * 100).toFixed(0) + ' pts' : kind === 'n' ? ((a - b) >= 0 ? '+' : '−') + fmt.int(Math.abs(a - b)) : !b ? '—' : ((a / b - 1) >= 0 ? '+' : '−') + Math.abs((a / b - 1) * 100).toFixed(0) + '%';
+  // ---- company
+  const revC = sumK(S.rev_total, k0, k1), revL = ly0 >= 0 ? sumK(S.rev_total, ly0, ly1) : null;
+  const yr0 = mtMonthK(S.months[k1].slice(0, 4) + '-01'), ytdC = sumK(S.rev_total, yr0, k1), ytdL = yr0 >= 12 ? sumK(S.rev_total, yr0 - 12, k1 - 12) : null;
+  const arrT = S.arr_blended ? S.arr_blended[k1] : null, arrTL = S.arr_blended && k1 >= 12 ? S.arr_blended[k1 - 12] : null;
+  const gmY = plFor(win(yr0, k1)).gm_pct, gmYL = yr0 >= 12 ? plFor(win(yr0 - 12, k1 - 12)).gm_pct : null;
+  const cash = (M.control || {}).cash || {}, runway = cash.balance_usd && cash.monthly_burn_usd ? cash.balance_usd / cash.monthly_burn_usd : null;
+  // ---- HeyMoon.ai (Investor calculation): points at the period end vs 3 months earlier; unit economics on the latest complete quarter vs the one before
+  const ha = H.at(k1), hp = H.at(Math.max(0, k1 - 3)), qe = I.qEnd, cq = H.at(qe), pq = H.at(qe - 3), qLb = rng(qe - 2, qe), qPb = rng(qe - 5, qe - 3);
+  const starts = (a, b) => I.nm.filter(br => !H.isDirect(br) && I.sinceK(br) >= a && I.sinceK(br) <= b).length, stC = starts(k0, k1), stP = starts(k0 - n, k1 - n);
+  const cacQ = k => { const ks = win(k - 2, k).map(j => S.months[j]), sp = mtSheetSpend(ks), nn = mtCacCount(ks); return (sp != null && nn) ? sp / nn : null; };
+  // ---- 2027 plan pace (same funnel as the Investor plan). Before Jan-27: monthly rate needed from the period end to the Dec-27 target vs the actual monthly rate (period, at least 3 months).
+  const TG = H.target(k1), PL = TG.p, TY = TG.TY, yk = +S.months[k1].slice(0, 4), mk = +S.months[k1].slice(5, 7), mLeft = (TY - yk) * 12 + (12 - mk);
+  const w = Math.max(n, 3), hw0 = H.at(Math.max(0, k1 - w)), pc = { };
+  if (TG.mode === 'track') {
+    pc.st = { a: TG.starts.a, t: TG.starts.t, txt: `${vN(TG.starts.a)} of ${vN(Math.round(TG.starts.t))} to date` };
+    pc.sc = { a: TG.scaled.a, t: TG.scaled.t, txt: `target ${vN(Math.round(TG.scaled.t))} by now` };
+    pc.arr = { a: TG.arr.a, t: TG.arr.t, txt: `target ${vM(TG.arr.t)} by now` };
+  } else {
+    const stNeed = PL.starts / 12, stAct = stC / n;
+    const arrNeed = mLeft > 0 && ha.arr ? Math.pow(PL.arr / ha.arr, 1 / mLeft) - 1 : null, arrAct = hw0.arr && ha.arr ? Math.pow(ha.arr / hw0.arr, 1 / w) - 1 : null;
+    const scNeed = mLeft > 0 ? (PL.scaled - ha.scaled) / mLeft : null, scAct = (ha.scaled - hw0.scaled) / w;
+    pc.st = { a: stAct, t: stNeed, txt: `${stAct.toFixed(0)}/mo vs ${stNeed.toFixed(0)}/mo needed in ${TY}` };
+    pc.arr = { a: arrAct, t: arrNeed, txt: `${vP(arrAct, 1)}/mo vs ${vP(arrNeed, 1)}/mo needed to reach ${vM(PL.arr)} by Dec-${String(TY).slice(2)}` };
+    pc.sc = { a: scAct, t: scNeed, txt: `${scAct >= 0 ? '+' : '−'}${Math.abs(scAct).toFixed(1)}/mo vs +${scNeed == null ? '—' : scNeed.toFixed(1)}/mo needed to reach ${vN(Math.round(PL.scaled))}` };
+  }
+  ['st', 'sc', 'arr'].forEach(k => pc[k].rg = ragCmp(pc[k].a, pc[k].t));
+  const retBase = ha.l2, nrrQ = cq.nrr && cq.nrr.nrr, nrrBase = cq.nrr && cq.nrr.rows ? cq.nrr.rows.length : null;
+  const retRg = retBase >= SMALL ? ragCmp(ha.l2ret, hp.l2ret) : null, nrrRg = nrrBase != null && nrrBase >= SMALL ? ragNrr(nrrQ) : null;
+  // ---- Commission
+  const R = CM.R, cRev = R(k0, k1), cRevL = R(ly0, ly1), exO = (a, b) => a < 0 ? null : sumA(CM.ms.filter(m => !CM.isO(m)).map(m => CM.rv(m, a, b))), xo = exO(k0, k1), xoL = exO(ly0, ly1);
+  const cNrr = CM.nrrAt(k1), cNrrL = CM.nrrAt(k1 - 12), sh = CM.shares(k0, k1);
+  const prov = (M.control.ounass.provisional_months || []).filter(m => !state.confirmed.has(m)), provIn = prov.filter(m => { const k = mtMonthK(m); return k >= k0 && k <= k1; });
+  // ---- Creators
+  const crAct = CR.active[k1], crActL = k1 >= 12 ? CR.active[k1 - 12] : null, crNew = sumK(CR.first_active, k0, k1), crNewL = sumK(CR.first_active, ly0, ly1), crRec = sumK(CR.coh_rec, k0, k1), crRecL = sumK(CR.coh_rec, ly0, ly1);
+  const CL = D.creator_list || (RAW.base || {}).creator_list || [];
+  const top10 = (a, b) => { const ord = sumK(CR.orders_total, a, b), t = CL.map(x => sumA(x.o.slice(a, b + 1))).sort((x, y) => y - x); return a >= 0 && ord ? sumA(t.slice(0, 10)) / ord : null; };
+  const crT10 = top10(k0, k1), crT10L = top10(ly0, ly1);
+  // ---- watch lists at the period end (k1)
+  const cWatch = CM.ms.filter(m => !CM.isMig(m)).map(m => { const lp = CM.lastPaid(m, k1), q = lp < 0 ? null : k1 - lp, a = CM.rv(m, k1 - 14, k1 - 12), b = CM.rv(m, k1 - 2, k1);
+    return { m, q, a, b, quiet: CM.isEx(m) && q != null && q >= 3, drop: a >= 5000 && b / a - 1 <= -0.30 }; }).filter(x => x.quiet || x.drop).sort((x, y) => (y.a - y.b) - (x.a - x.b));
+  const lp = br => { for (let k = k1; k >= 0; k--) if ((br.monthly[k] || 0) > 0) return k; return -1; };
+  const hWatch = I.nm.filter(br => H.live(br, k1)).map(br => ({ br, l: lp(br) })).filter(x => x.l >= 0 && k1 - x.l >= 3).sort((a, b) => (H.isScaled(b.br, k1) - H.isScaled(a.br, k1)) || ((k1 - b.l) - (k1 - a.l)));
+  const c3 = x => sumA(x.o.slice(k1 - 2, k1 + 1)), p3 = x => sumA(x.o.slice(k1 - 5, k1 - 2));
+  const crWatch = CL.filter(x => p3(x) > 0).sort((a, b) => p3(b) - p3(a)).slice(0, 20).filter(x => c3(x) <= p3(x) * 0.7);
+  // ---- needs attention: one item per area (merged), ranked red > amber > watch-only; within a rank HeyMoon.ai > Commission > Company > Creators; the HeyMoon.ai plan gap always shows when behind
+  const worst = rs => rs.includes('r') ? 'r' : rs.includes('a') ? 'a' : null, rank = r => r === 'r' ? 0 : r === 'a' ? 1 : 2;
+  const att = [];
+  { const bits = [], rs = [pc.st.rg, pc.sc.rg, pc.arr.rg];
+    if (pc.st.rg && pc.st.rg !== 'g') bits.push('Phase 1 starts ' + pc.st.txt);
+    if (pc.sc.rg && pc.sc.rg !== 'g') bits.push('scaled brands ' + pc.sc.txt);
+    if (pc.arr.rg && pc.arr.rg !== 'g') bits.push('ARR ' + pc.arr.txt);
+    const hq = hWatch.find(x => H.isScaled(x.br, k1)); if (hq) bits.push(`${esc(hq.br.name)} (scaled) no payment for ${k1 - hq.l} months`);
+    if (bits.length) att.push({ area: 'HeyMoon.ai', o: 0, rg: worst(rs), t: (worst(rs) ? `behind the ${TY} plan pace: ` : '') + bits.join('; '), pg: 'heymoon' }); }
+  { const bits = [], rs = [ragCmp(cRev, cRevL), ragNrr(cNrr && cNrr.nrr), ragCmp(xo, xoL)];
+    if (rs[0] === 'r') bits.push(`revenue ${chg(cRev, cRevL)} vs ${lyLab}`); if (rs[1] === 'r') bits.push(`NRR ${vP(cNrr && cNrr.nrr)}`); if (rs[2] === 'r') bits.push(`excl. Ounass ${chg(xo, xoL)}`);
+    const cb = cWatch[0]; if (cb) bits.push(`${esc(cb.m.name)} ${cb.drop ? 'last 3 months ' + vPct(cb.b / cb.a - 1) + ' vs a year earlier' : 'no payment for ' + cb.q + ' months'}`);
+    if (bits.length) att.push({ area: 'Commission', o: 1, rg: rs.includes('r') ? 'r' : null, t: bits.join('; '), pg: 'commission' }); }
+  { const rr = ragRunway(runway); if (rr === 'r' || rr === 'a') att.push({ area: 'Company', o: 2, rg: rr, t: `cash runway ${runway.toFixed(1)} months (cash ${vM(cash.balance_usd)} at ${cash.as_of || '—'}, burn ${vM(cash.monthly_burn_usd)}/mo)`, pg: 'investor' }); }
+  { const bits = [], rs = [ragCmp(crRec, crRecL), ragCmp(crNew, crNewL), ragCmp(crAct, crActL)];
+    if (rs[0] === 'r') bits.push(`recruited ${chg(crRec, crRecL)} vs ${lyLab}`); if (rs[1] === 'r') bits.push(`new active ${chg(crNew, crNewL)}`); if (rs[2] === 'r') bits.push(`active ${chg(crAct, crActL)} vs a year ago`);
+    const cw = crWatch[0]; if (cw) bits.push(`${esc(cw.h || 'ID ' + cw.id)} (top-20 creator) net orders ${vPct(c3(cw) / p3(cw) - 1)} (${rng(k1 - 2, k1)} vs ${rng(k1 - 5, k1 - 3)})`);
+    if (bits.length) att.push({ area: 'Creators', o: 3, rg: rs.includes('r') ? 'r' : null, t: bits.join('; '), pg: 'creators' }); }
+  att.sort((a, b) => (rank(a.rg) - rank(b.rg)) || (a.o - b.o));
+  // ---- full scorecard rows: [area, metric, value, comparison label, change, rag, page]
+  const rows = [
+    ['Company', 'Revenue · ' + cLab, vM(revC), 'vs ' + lyLab, chg(revC, revL), ragCmp(revC, revL), null],
+    ['Company', 'Revenue year to date', vM(ytdC), 'vs ' + rng(yr0 - 12, k1 - 12), chg(ytdC, ytdL), ragCmp(ytdC, ytdL), null],
+    ['Company', 'Total ARR · ' + lab(k1) + ' (Commission seasonally adjusted)', vM(arrT), 'vs ' + lab(k1 - 12), chg(arrT, arrTL), ragCmp(arrT, arrTL), null],
+    ['Company', 'Gross margin · year to date', vP(gmY), 'vs a year earlier', chg(gmY, gmYL, 'pts'), ragCmp(gmY, gmYL), 'financials'],
+    ['Company', 'Cash · runway', vM(cash.balance_usd) + ' · ' + (runway == null ? '—' : runway.toFixed(1) + ' mo'), 'as of ' + (cash.as_of || '—') + ', burn ' + vM(cash.monthly_burn_usd) + '/mo', '', ragRunway(runway), null],
+    ['HeyMoon.ai', 'ARR · ' + lab(k1), vM(ha.arr), 'vs ' + lab(k1 - 3) + '; plan: ' + pc.arr.txt, chg(ha.arr, hp.arr), pc.arr.rg, 'heymoon'],
+    ['HeyMoon.ai', 'Phase 1 starts · ' + cLab, vN(stC), 'vs ' + rng(k0 - n, k1 - n) + '; plan: ' + pc.st.txt, chg(stC, stP, 'n'), pc.st.rg, 'heymoon'],
+    ['HeyMoon.ai', 'Scaled brands · ' + lab(k1), vN(ha.scaled), 'vs ' + lab(k1 - 3) + '; plan: ' + pc.sc.txt, chg(ha.scaled, hp.scaled, 'n'), pc.sc.rg, 'heymoon'],
+    ['HeyMoon.ai', 'LTV / CAC · ' + qLb, fmt.x(cq.ltvcac), 'vs ' + qPb, chg(cq.ltvcac, pq.ltvcac), ragCmp(cq.ltvcac, pq.ltvcac), 'heymoon'],
+    ['HeyMoon.ai', 'Retention after Phase 1 · ' + lab(k1), vP(ha.l2ret), 'vs ' + lab(k1 - 3) + ' · ' + vN(retBase) + ' brands', chg(ha.l2ret, hp.l2ret, 'pts'), retRg, 'heymoon'],
+    ['HeyMoon.ai', 'NRR · ' + qLb, vP(nrrQ), 'vs ' + qPb + ' · ' + vN(nrrBase) + ' brands', chg(nrrQ, pq.nrr && pq.nrr.nrr, 'pts'), nrrRg, 'heymoon'],
+    ['Commission', 'Revenue · ' + cLab + (provIn.length ? ' (provisional)' : ''), vM(cRev), 'vs ' + lyLab, chg(cRev, cRevL), ragCmp(cRev, cRevL), 'commission'],
+    ['Commission', 'Revenue excl. Ounass · ' + cLab, vM(xo), 'vs ' + lyLab, chg(xo, xoL), ragCmp(xo, xoL), 'commission'],
+    ['Commission', 'NRR · ' + rng(k1 - 2, k1), vP(cNrr && cNrr.nrr), 'vs a year earlier', chg(cNrr && cNrr.nrr, cNrrL && cNrrL.nrr, 'pts'), ragNrr(cNrr && cNrr.nrr), 'commission'],
+    ['Creators', 'Active creators · ' + lab(k1), vN(crAct), 'vs ' + lab(k1 - 12), chg(crAct, crActL), ragCmp(crAct, crActL), 'creators'],
+    ['Creators', 'New active · ' + cLab, vN(crNew), 'vs ' + lyLab, chg(crNew, crNewL), ragCmp(crNew, crNewL), 'creators'],
+    ['Creators', 'Recruited · ' + cLab, vN(crRec), 'vs ' + lyLab, chg(crRec, crRecL), ragCmp(crRec, crRecL), 'creators'],
+    ['Creators', 'Top 10 share of net orders · ' + cLab, vP(crT10), 'vs ' + lyLab, chg(crT10, crT10L, 'pts'), null, 'creators']];
+  const go = pg => pg ? `<a href="#" data-goto="${pg}">open</a>` : '';
+  let lastArea = ''; const tRows = rows.map(r => { const a = r[0] !== lastArea ? r[0] : ''; lastArea = r[0]; return `<tr${a ? ' style="border-top:2px solid var(--rule)"' : ''}><td style="text-align:left;font-weight:600">${a}</td><td style="text-align:left">${r[1]}</td><td><b>${r[2]}</b></td><td>${r[4]}</td><td style="text-align:left" class="sm">${r[3]}</td><td style="text-align:center">${dot(r[5])}</td><td>${go(r[6])}</td></tr>`; }).join('');
+  const cnt = c => rows.filter(r => r[5] === c).length;
+  // ---- layout A (26 Nov, Kareem): company strip · three columns sized by priority (HeyMoon.ai 45% · Commission 30% · Creators 25%)
+  const cs = mtChecks(), pass = cs.filter(c => c.pass).length;
+  const css = `<style>.ov table.sc{width:100%;border-collapse:collapse}.ov table.sc td,.ov table.sc th{padding:8px 10px;border-bottom:1px solid var(--rule);text-align:right;font-size:13.5px}.ov table.sc th{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600}.ov .ovs{display:flex;flex-direction:column;gap:2px;color:inherit;text-decoration:none;padding:10px 16px;border-right:1px solid var(--rule)}.ov .ovs:last-child{border-right:0}.ov .ovc{min-height:0}.ov .ovc table.sc td{padding:6px 8px;font-size:13px}.ov .ovc table.sc th{padding:4px 8px}.ov .cols{display:grid;grid-template-columns:4.5fr 3fr 2.5fr;gap:14px;margin-top:14px}.ov .tag{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.04em;padding:2px 7px;border-radius:3px;background:rgba(217,154,30,.14);color:#8A5A12;margin-left:8px;vertical-align:middle}@media(max-width:1000px){.ov .cols{grid-template-columns:1fr}}</style>`;
+  const chip2 = (c, rg) => `<div class="val2" style="color:${rg ? RC[rg] : 'var(--ink-3)'}">${c}</div>`;
+  const mrow = (l, v, c, rg, note) => `<tr><td style="text-align:left">${dot(rg)}&nbsp; ${l}</td><td><b>${v}</b></td><td class="sm" style="text-align:left">${c}${note ? ' · ' + note : ''}</td></tr>`;
+  const hrow = (l, v, c, plan, rg) => `<tr><td style="text-align:left">${dot(rg)}&nbsp; ${l}</td><td><b>${v}</b></td><td class="sm">${c}</td><td class="sm" style="text-align:left;color:${rg ? RC[rg] : 'var(--ink-3)'}">${plan}</td></tr>`;
+  const strip = (l, v, c, rg, pg) => `<a href="#" data-goto="${pg}" class="ovs"><span class="sm" style="text-transform:uppercase;letter-spacing:.08em;font-size:10.5px">${l}</span><span style="font:600 22px/1.2 'Inter Tight',Inter,sans-serif">${v}</span><span style="color:${rg ? RC[rg] : 'var(--ink-3)'};font-size:13px;font-weight:600">${dot(rg)} ${c}</span></a>`;
+  const top5 = sh.list.slice(0, 5).map(x => { const l = ly0 >= 0 ? CM.rv(x.m, ly0, ly1) : null; return `<tr><td style="text-align:left">${esc(x.m.name)}</td><td>${vM(x.v)}</td><td class="${l && x.v >= l ? 'pos' : l ? 'neg' : ''}">${l ? chg(x.v, l) : 'new'}</td><td class="sm">${vP(x.v / sh.tot)}</td></tr>`; }).join('');
+  const col = (cls, name, pg, big, bigC, bigRg, sentence, table, extra) => `<div class="cd ovc ${cls}"><div style="display:flex;justify-content:space-between;align-items:baseline"><p class="eb" style="margin:0">${name}</p><a href="#" data-goto="${pg}" class="sm">open page →</a></div>
+<div class="big" style="font:600 40px/1.1 'Inter Tight',Inter,sans-serif;margin-top:8px">${big}</div>${chip2(bigC, bigRg)}
+<p style="font-size:15px;line-height:1.45;margin:10px 0 12px">${sentence}</p><table class="sc" style="width:100%">${table}</table>${extra || ''}</div>`;
+  const behind = ['st', 'sc', 'arr'].filter(k => pc[k].rg && pc[k].rg !== 'g').length;
+  const gapK = ['st', 'sc', 'arr'].filter(k => pc[k].t).sort((x, y) => pc[x].a / pc[x].t - pc[y].a / pc[y].t)[0], gapN = { st: 'Phase 1 starts', sc: 'scaled brands', arr: 'ARR growth' };
+  const hmSentence = behind ? `Behind the ${TY} plan pace on ${behind} of 3 measures. Biggest gap: ${gapN[gapK]}, ${pc[gapK].txt}.` : `On or ahead of the ${TY} plan pace on starts, scaled brands and ARR.`;
+  const sub = s => `<span class="sm" style="font-size:14px;font-weight:400">${s}</span>`;
+  root.innerHTML = commCss() + css + `<div class="inv cm ov" data-norename>
+<p class="eb" style="margin:0">Management summary · draft</p><h1 style="margin-top:4px">MoonTech · ${per.label || cLab}</h1>
+<div class="cd" style="padding:0;display:grid;grid-template-columns:repeat(3,1fr);margin-top:10px">
+ ${strip('Company revenue · ' + cLab, vM(revC), chg(revC, revL) + ' vs ' + lyLab, ragCmp(revC, revL), 'kpis')}
+ ${strip('Total ARR · ' + lab(k1) + ' · seasonally adjusted', vM(arrT), chg(arrT, arrTL) + ' vs ' + lab(k1 - 12), ragCmp(arrT, arrTL), 'kpis')}
+ ${strip('Cash runway · as of ' + (cash.as_of || '—'), runway == null ? '—' : runway.toFixed(1) + ' months', 'cash ' + vM(cash.balance_usd) + ' · burn ' + vM(cash.monthly_burn_usd) + '/mo', ragRunway(runway), 'investor')}
+</div>
+<div class="cols">
+ ${col('hm', 'HeyMoon.ai', 'heymoon', vM(ha.arr) + ' ' + sub('ARR · ' + lab(k1)), chg(ha.arr, hp.arr) + ' vs ' + lab(k1 - 3) + ' · ' + vP(pc.arr.a, 1) + '/mo vs ' + vP(pc.arr.t, 1) + '/mo plan pace', pc.arr.rg, hmSentence,
+   `<thead><tr><th></th><th>Now</th><th title="Phase 1 starts vs the previous period of the same length; the rest vs 3 months (or the quarter) earlier">Change</th><th style="text-align:left">vs ${TY} plan pace</th></tr></thead><tbody>`
+   + hrow('Phase 1 starts · ' + cLab, vN(stC), chg(stC, stP, 'n'), pc.st.txt, pc.st.rg)
+   + hrow('Scaled brands · ' + lab(k1), vN(ha.scaled), chg(ha.scaled, hp.scaled, 'n'), pc.sc.txt, pc.sc.rg)
+   + hrow('ARR · ' + lab(k1), vM(ha.arr), chg(ha.arr, hp.arr), pc.arr.txt, pc.arr.rg)
+   + hrow('LTV / CAC · ' + qLb, fmt.x(cq.ltvcac), chg(cq.ltvcac, pq.ltvcac), 'plan ' + fmt.x(PL.ltvcac) + ' · CAC ' + vM(cacQ(qe)), ragCmp(cq.ltvcac, pq.ltvcac))
+   + hrow('NRR · ' + qLb, vP(nrrQ), chg(nrrQ, pq.nrr && pq.nrr.nrr, 'pts'), nrrBase != null && nrrBase < SMALL ? 'small base (' + nrrBase + ' brands), no colour' : '', nrrRg)
+   + hrow('Retention after Phase 1', vP(ha.l2ret), chg(ha.l2ret, hp.l2ret, 'pts'), retBase < SMALL ? 'small base (' + retBase + ' brands), no colour' : '', retRg) + '</tbody>')}
+ ${col('cm', 'Commission', 'commission', vM(cRev) + ' ' + sub('revenue · ' + cLab) + (provIn.length ? '<span class="tag" title="Includes the Ounass buffer; Ounass takes about 60 days to confirm">provisional</span>' : ''), chg(cRev, cRevL) + ' vs ' + lyLab, ragCmp(cRev, cRevL),
+   `Excluding Ounass, revenue is ${chg(xo, xoL)} on ${lyLab}. Ounass is ${vP(sh.top1)} of client revenue${provIn.length ? '; ' + provIn.map(fmt.month).join(' and ') + ' provisional' : ''}.`,
+   '<tbody>' + mrow('NRR · ' + rng(k1 - 2, k1), vP(cNrr && cNrr.nrr), chg(cNrr && cNrr.nrr, cNrrL && cNrrL.nrr, 'pts') + ' vs a year earlier', ragNrr(cNrr && cNrr.nrr))
+   + mrow('Revenue excl. Ounass', vM(xo), chg(xo, xoL) + ' vs ' + lyLab, ragCmp(xo, xoL)) + '</tbody>',
+   `<p class="eb" style="margin:14px 0 4px">Top 5 clients · ${cLab}</p><table class="sc" style="width:100%"><tbody>${top5}</tbody></table>`)}
+ ${col('cr', 'Creators', 'creators', vN(crAct) + ' ' + sub('active · ' + lab(k1)), chg(crAct, crActL) + ' vs ' + lab(k1 - 12), ragCmp(crAct, crActL),
+   `We recruited ${vN(crRec)} creators in ${cLab} (${vN(crRecL)} a year earlier).`,
+   '<tbody>' + mrow('Recruited · ' + cLab, vN(crRec), chg(crRec, crRecL) + ' vs ' + lyLab, ragCmp(crRec, crRecL))
+   + mrow('New active · ' + cLab, vN(crNew), chg(crNew, crNewL) + ' vs ' + lyLab, ragCmp(crNew, crNewL))
+   + mrow('Top 10 share of net orders', vP(crT10), chg(crT10, crT10L, 'pts') + ' vs ' + lyLab, null, 'concentration') + '</tbody>')}
+</div>
+<div class="sec" style="margin-top:22px"><h2 class="st">Needs attention</h2><div class="cd">${att.length ? '<ol style="margin:0;padding-left:20px">' + att.slice(0, 5).map(x => `<li style="margin:6px 0">${dot(x.rg)}&nbsp; <b>${x.area}:</b> ${x.t} · <a href="#" data-goto="${x.pg}">open</a></li>`).join('') + '</ol>' : '<p class="sm" style="margin:0">Nothing flagged.</p>'}</div></div>
+<p class="sm" style="margin-top:14px">${prov.length ? 'Ounass ' + prov.map(fmt.month).join(' and ') + ' provisional (' + (addbackActive() ? 'buffer added back' : 'buffer held') + ')' : 'No provisional months'} · checks ${pass}/${cs.length} · colours: HeyMoon.ai starts, scaled brands and ARR vs the ${TY} plan pace; other HeyMoon.ai measures vs last quarter; Commission and Creators vs last year; NRR and runway on fixed lines; hollow dot = base under ${SMALL} brands or no comparison · <a href="#" data-goto="control">Control</a></p>
+<details style="margin-top:14px"><summary>Full scorecard (${cnt('g')} green · ${cnt('a')} amber · ${cnt('r')} red)</summary><div class="cd" style="padding:0;margin-top:8px"><table class="sc"><thead><tr><th style="text-align:left">Area</th><th style="text-align:left">Metric</th><th>Value</th><th>Change</th><th style="text-align:left">Compared with</th><th style="text-align:center">Status</th><th></th></tr></thead><tbody>${tRows}</tbody></table></div>
+<p class="sm" style="margin-top:6px">Green = better than the comparison or plan pace; amber = up to 10% worse; red = more than 10% worse. NRR: green 110%+, amber 100–110%, red under 100%. Runway: green 12+ months, amber 6–12, red under 6.</p></details>
+</div>`;
+  root.querySelectorAll('[data-goto]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); const b = document.querySelector('#tabs button[data-page="' + a.dataset.goto + '"]'); if (b) b.click(); }));
 }
 
 function renderAnnual() {
