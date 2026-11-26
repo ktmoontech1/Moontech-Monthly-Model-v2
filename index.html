@@ -262,6 +262,8 @@ footer{border-top:1px solid var(--rule);padding:18px 0 40px;font-size:11.5px;col
       <button data-page="kpis" class="active"><span class="n">01</span>KPIs</button>
       <button data-page="investor"><span class="n">02</span>Investor Dashboard</button>
       <button data-page="heymoon"><span class="n">02b</span>HeyMoon.ai (draft)</button>
+      <button data-page="commission"><span class="n">02c</span>Commission (draft)</button>
+      <button data-page="commclients"><span class="n">02d</span>Commission clients (draft)</button>
       <button data-page="financials"><span class="n">03</span>Financials</button>
       <button data-page="performance"><span class="n">04</span>Business Performance</button>
       <button data-page="segmentation"><span class="n">05</span>Client Segmentation</button>
@@ -298,6 +300,8 @@ footer{border-top:1px solid var(--rule);padding:18px 0 40px;font-size:11.5px;col
   <section class="page" id="page-segmentation"></section>
   <section class="page" id="page-investor"></section>
   <section class="page" id="page-heymoon"></section>
+  <section class="page" id="page-commission"></section>
+  <section class="page" id="page-commclients"></section>
   <section class="page" id="page-ladder"></section>
   <section class="page" id="page-cac"></section>
   <section class="page" id="page-control"></section>
@@ -544,7 +548,7 @@ function bindUI() {
   document.getElementById('theme').addEventListener('click', () => { const cur = document.documentElement.getAttribute('data-theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); const nx = cur === 'dark' ? 'light' : 'dark'; document.documentElement.setAttribute('data-theme', nx); LS('mm.theme', nx); renderAll(); });
   showPage();
 }
-const PAGES = ['kpis', 'investor', 'heymoon', 'financials', 'performance', 'segmentation', 'ladder', 'cac', 'control'];
+const PAGES = ['kpis', 'investor', 'heymoon', 'commission', 'commclients', 'financials', 'performance', 'segmentation', 'ladder', 'cac', 'control'];
 function showPage() {
   if (!PAGES.includes(state.page)) state.page = 'kpis';
   // HeyMoon.ai page opens on the latest complete quarter (agreed 25 Nov 2026), once per visit and only if the period is still the default 12 months
@@ -559,9 +563,9 @@ function showPage() {
   ctl.querySelector('#ctl-finwrap').style.display = onFin ? '' : 'none';
   ctl.querySelector('#ctl-perfwrap').style.display = onPerf ? '' : 'none';
   ctl.querySelector('#ctl-year').parentElement.style.display = ((onFin && state.finView === 'monthly') || (onPerf && state.perfView === 'trends')) ? '' : 'none';
-  ctl.querySelector('#ctl-periodwrap').style.display = (state.page === 'kpis' || state.page === 'segmentation' || state.page === 'heymoon') ? '' : 'none';
+  ctl.querySelector('#ctl-periodwrap').style.display = (state.page === 'kpis' || state.page === 'segmentation' || state.page === 'heymoon' || state.page === 'commission') ? '' : 'none';
   // Segmented / Company-wide only where commission and ROAS can be shown separately: not on Client Segmentation, Control, Investor, or the live 2026 P&L
-  ctl.querySelector('#ctl-view').parentElement.style.display = (state.page === 'segmentation' || state.page === 'control' || state.page === 'investor' || state.page === 'heymoon' || (onFin && state.finView === 'pnl2026')) ? 'none' : '';
+  ctl.querySelector('#ctl-view').parentElement.style.display = (state.page === 'segmentation' || state.page === 'control' || state.page === 'investor' || state.page === 'heymoon' || state.page === 'commission' || state.page === 'commclients' || (onFin && state.finView === 'pnl2026')) ? 'none' : '';
   { const bw = ctl.querySelector('#ctl-buffer'); if (bw && bw.parentElement) bw.parentElement.style.display = state.page === 'investor' ? 'none' : ''; }   // investor metrics always add the Ounass buffer back
   try { renderFlags(); } catch (e) {}
   if (onFin) ['pnl2026', 'annual', 'monthly'].forEach(v => { const el = document.getElementById('fin-' + v); if (el) el.style.display = v === state.finView ? '' : 'none'; });
@@ -577,7 +581,7 @@ function renderFlags() {
   document.getElementById('flagbar').innerHTML = f.join('');
   mtCheckPill();
 }
-function renderAll() { if (!ensurePeriod(state.period)) state.period = 'TTM:' + M.latest_month; document.querySelectorAll("section.page").forEach(x => x.dataset.view = state.view); renderFlags(); renderKpis(); renderInvestor(); renderHeyMoon(); renderAnnual(); renderMonthly(); renderPerformance(); renderActuals(); renderSegmentation(); renderControl(); }
+function renderAll() { if (!ensurePeriod(state.period)) state.period = 'TTM:' + M.latest_month; document.querySelectorAll("section.page").forEach(x => x.dataset.view = state.view); renderFlags(); renderKpis(); renderInvestor(); renderHeyMoon(); renderCommission(); renderCommClients(); renderAnnual(); renderMonthly(); renderPerformance(); renderActuals(); renderSegmentation(); renderControl(); }
 
 /* ============================================================ charts (inline SVG) */
 const tipEl = document.getElementById('tip');
@@ -695,12 +699,14 @@ function mtCheckPill() { try { const cs = mtChecks(), pass = cs.filter(c => c.pa
 const mtRenameRx = [[/\bNew Model\b/g, 'HeyMoon.ai'], [/\bROAS\b(?!(?:-\s?|\s)?(?:[Ll]adder|[Ll]evels?\b|[Ff]actor|[Tt]arget|[Mm]ilestone|[Tt]racker|billing|invoice|spend|priced|-))/g, 'HeyMoon.ai']];
 function mtRenameText(s) { let o = s; mtRenameRx.forEach(([rx, to]) => { o = o.replace(rx, to); }); return o; }
 function mtRenameNode(root) {
-  if (!root) return; if (root.nodeType === 3) { const t = mtRenameText(root.nodeValue); if (t !== root.nodeValue) root.nodeValue = t; return; }
+  if (!root) return; const nr = el => el && el.closest && el.closest('[data-norename]');   // Commission pages keep 'ROAS' (= GMV ÷ commission), agreed 25 Nov
+  if (root.nodeType === 3 && nr(root.parentElement)) return; if (root.nodeType === 1 && nr(root)) return;
+  if (root.nodeType === 3) { const t = mtRenameText(root.nodeValue); if (t !== root.nodeValue) root.nodeValue = t; return; }
   if (root.nodeType !== 1 || root.tagName === 'SCRIPT' || root.tagName === 'STYLE') return;
   if (root.hasAttribute && root.hasAttribute('title')) { const t = mtRenameText(root.getAttribute('title')); if (t !== root.getAttribute('title')) root.setAttribute('title', t); }
-  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => (n.parentNode && /^(SCRIPT|STYLE)$/.test(n.parentNode.nodeName)) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: n => (n.parentNode && (/^(SCRIPT|STYLE)$/.test(n.parentNode.nodeName) || nr(n.parentElement))) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
   let n; while ((n = w.nextNode())) { const t = mtRenameText(n.nodeValue); if (t !== n.nodeValue) n.nodeValue = t; }
-  root.querySelectorAll && root.querySelectorAll('[title]').forEach(el => { const t = mtRenameText(el.getAttribute('title')); if (t !== el.getAttribute('title')) el.setAttribute('title', t); });
+  root.querySelectorAll && root.querySelectorAll('[title]').forEach(el => { if (nr(el)) return; const t = mtRenameText(el.getAttribute('title')); if (t !== el.getAttribute('title')) el.setAttribute('title', t); });
 }
 function mtStartRename() {
   mtRenameNode(document.body); document.title = mtRenameText(document.title);
@@ -916,7 +922,13 @@ function hmModel(I) {
       const arr = s * P.arr_per_scaled[i] + st * P.phase1_price, p1 = st / 4, act = s + p1, arpa = arr / act, lost = s0 * P.churn + nw * P.churn / 2 + st * (1 - P.conv), lc = lost / ((s0 + s) / 2 + p1), ltv = arpa * P.margin / lc;
       path.push({ y, spend: P.spend[i], cac: P.cac[i], starts: st, scaled: s, arr, ltvcac: ltv / P.cac[i], aps: P.arr_per_scaled[i] }); });
     return path; };
-  return { THR, DIRECT, lvl, entryLvl, isDirect, isScaled, live, paid3, paidTo, w3, upgradeN, p1Scaled, at, planCfg, plan };
+  // targets for the first plan year (agreed 25 Nov): Phase 1 starts even by month; scaled brands and ARR on a straight line from the Dec actual to the year-end target; CAC = plan CAC
+  // before the year starts: 'pace' (plan from the latest month, or the Dec actual once it exists); during the year: 'track' (actual vs target to date)
+  const target = k1 => { const TY = planCfg.years[0], kD = mtMonthK((TY - 1) + '-12'), Lk = L(), kS = (kD >= 0 && kD <= Lk) ? kD : Lk, a0 = at(kS), p = plan(a0.scaled)[0];
+    if (+S.months[k1].slice(0, 4) < TY || kD < 0) return { mode: 'pace', TY, p, a0, kS };
+    const m = Math.min(12, k1 - kD), a1 = at(k1), sAct = nm.filter(br => !isDirect(br) && sinceK(br) > kD && sinceK(br) <= k1).length;
+    return { mode: 'track', TY, p, a0, kS, m, starts: { a: sAct, t: p.starts / 12 * m }, scaled: { a: a1.scaled, t: a0.scaled + (p.scaled - a0.scaled) * m / 12 }, arr: { a: a1.arr, t: a0.arr + (p.arr - a0.arr) * m / 12 }, cacT: p.cac }; };
+  return { THR, DIRECT, lvl, entryLvl, isDirect, isScaled, live, paid3, paidTo, w3, upgradeN, p1Scaled, at, planCfg, plan, target };
 }
 
 function renderInvestor() {
@@ -1127,7 +1139,7 @@ function renderInvestor() {
  ${uRow('Phase 1 → scaled conversion', '~' + vP(PTH.conv), vP(PTH.conv), PTH.conv, PTH.conv, 'pts', false, 'Held: ' + vP(convLo) + '–' + vP(convHi) + ' observed so far')}
  ${uRow('Retention after Phase 1', vP(c.l2ret), vP(1 - PTH.churn), c.l2ret, 1 - PTH.churn, 'pts', false, 'Held: ' + (c.l2 - c.l2ch) + ' of ' + c.l2 + ' scaled brands retained')}
  ${uRow('ARR per scaled brand', vM(apsNow), vM(P5.aps), apsNow, P5.aps, null, false, 'Brands have had little time to climb the ladder (launched Jan-26); top scaled brand already at ' + vM(topAps) + ', ' + nAbove + ' of ' + scPays.length + ' at ' + vM(PTH.arr_per_scaled[0]) + '+; NRR ' + vP(nrrQ.nrr))}
- ${uRow('CAC per Phase 1 start', vM(cacL && cacL.cac) + ' (' + (cacL ? cacL.lab : '') + ')', vM(P5.cac), cacL && cacL.cac, P5.cac, null, true, 'Conservative: equal to fully loaded CAC to ' + asOf + ' (' + vM(c.cac) + '); assumes no efficiency gain at scale')}
+ ${uRow('CAC per Phase 1 start', vM(cacL && cacL.cac) + ' (' + (cacL ? cacL.lab : '') + ')', vM(P5.cac), cacL && cacL.cac, P5.cac, null, true, 'Conservative: rises from ' + vM(PTH.cac[0]) + ' in ' + PTH.years[0] + ' to ' + vM(P5.cac) + ' in ' + PTH.years[PTH.years.length - 1] + (c.cac ? ', about ' + Math.round((P5.cac / c.cac - 1) * 100) + '% above fully loaded CAC to ' + asOf + ' (' + vM(c.cac) + ')' : '') + '; assumes CAC gets worse as we scale (harder-to-win brands, more sales hires)')}
  ${uRow('LTV / CAC (all brands)', fmt.x(cq.ltvcac) + ' (' + qN + ')', fmt.x(P5.ltvcac), cq.ltvcac, P5.ltvcac, null, false, 'Lower from the conservative CAC, and fast growth adds many new Phase 1 brands')}
  ${uRow('Payback per scaled brand', fmt.mo(pbNow), fmt.mo(pbScaled), pbNow, pbScaled, null, true, 'Higher CAC, mostly offset by higher ARR per brand')}
  ${uRow('Gross margin', vP(gm), vP(PTH.margin), gm, PTH.margin, 'pts', false, 'Conservative: below today\'s ' + vP(gm) + ' actual')}
@@ -1208,6 +1220,19 @@ ${prov.length ? `<dt>Provisional</dt><dd>Total company figures include an estima
 }
 
 /* ============================================================ HeyMoon.ai Summary (first draft, 25 Nov 2026; spec agreed with Kareem) */
+// actual vs target to date strip (shared look for HeyMoon.ai and Commission): green >= 100% of target, amber >= 90%, red below; for CAC lower is better
+function mtTgtCell(l, a, t, f, lower, note) { const r = (a != null && t) ? (lower ? t / a : a / t) : null, col = r == null ? 'var(--ink-3)' : r >= 1 ? '#1F8A52' : r >= 0.9 ? '#B07218' : '#C0392B';
+  return `<div><div class="sm" style="text-transform:uppercase;letter-spacing:.08em;font-size:10.5px">${l}</div><div style="font:600 20px/1.2 'Inter Tight',Inter,sans-serif">${f(a)} <span class="sm" style="font-weight:400">vs ${f(t)}</span></div><div class="sm" style="color:${col};font-weight:600">${r == null ? '—' : lower ? (a <= t ? 'on target' : vPct(a / t - 1) + ' above target') : Math.round(a / t * 100) + '% of target'}${note ? ' <span style="color:var(--ink-3);font-weight:400">· ' + note + '</span>' : ''}</div></div>`; }
+const vPct = x => (x >= 0 ? '+' : '−') + Math.abs(x * 100).toFixed(0) + '%';
+function hmTrack(TG, cacAct, vM) { const mL = fmt.month(S.months[TG.kS + TG.m]);
+  return `<div class="plan" style="border-left-color:var(--ink)"><b>${TG.TY} target vs actual · to ${mL}</b> (${TG.m} of 12 months; full-year target ${fmt.int(TG.p.starts)} Phase 1 starts, ${fmt.int(TG.p.scaled)} scaled brands, ${vM(TG.p.arr)} ARR)
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:10px">${mtTgtCell('Phase 1 starts, year to date', TG.starts.a, TG.starts.t, fmt.int)}${mtTgtCell('Scaled brands', TG.scaled.a, TG.scaled.t, fmt.int)}${mtTgtCell('ARR', TG.arr.a, TG.arr.t, vM)}${mtTgtCell('CAC · period', cacAct, TG.cacT, vM, true)}</div></div>`; }
+// Commission revenue target (config commission_plan, agreed 25 Nov: +20% placeholder until the budget): base = prior calendar year, Nov–Dec estimated from the seasonal weights until actual; phased by the same weights
+function commTarget(TY) { const cp = ((M.config || {}).commission_plan || {}), e = cp[TY] || cp[String(TY)]; if (!e) return null;
+  const w = D.weights || [], ws = w.reduce((a, b) => a + b, 0), kb0 = mtMonthK((TY - 1) + '-01'), Lk = L(); if (kb0 < 0 || !ws) return null;
+  const kb1 = Math.min(kb0 + 11, Lk), done = kb1 - kb0 + 1, act = S.rev_legacy.slice(kb0, kb1 + 1).reduce((a, b) => a + (b || 0), 0), wDone = w.slice(0, done).reduce((a, b) => a + b, 0) / ws;
+  const base = done >= 12 ? act : act / wDone, target = base * (1 + e.revenue_growth), month = i => target * w[i] / ws;
+  return { TY, g: e.revenue_growth, base, est: done < 12, done, act, target, month, kT0: kb0 + 12 }; }
 function renderHeyMoon() {
   const root = document.getElementById('page-heymoon'); if (!root) return;
   const I = computeInvestor(); const { nm, sum, win, sinceK, churnK, paidBy, churnedBy, activeAt, nmRev, nmRet, upgrade, launchK, NM_MARGIN } = I;
@@ -1238,7 +1263,7 @@ function renderHeyMoon() {
   const hot = (l, v, ch, s) => `<div class="cd hot" style="min-height:0"><p class="eb">${l}</p><div class="mid" style="color:#fff">${v}</div>${(ch || '').replace(/color:#1F8A52|color:#C0392B|color:var\(--ink-3\)/g, 'color:#fff').replace(/class="sm" style="font-weight:400"/g, 'style="font-weight:400;font-size:12.5px;color:rgba(255,255,255,.85)"')}${s ? '<div class="sub" style="margin-top:4px">' + s + '</div>' : ''}</div>`;
   const tile = (l, v, ch, s) => `<div class="cd"><p class="eb">${l}</p><div class="mid">${v}</div>${ch || ''}${s ? '<div class="sm">' + s + '</div>' : ''}</div>`;
   // ---- plan line (2027 targets, same funnel as the Investor plan)
-  const plan = H.plan(c.scaled)[0];   // first plan year, same funnel and config inputs as the Investor plan
+  const TG = H.target(k1), plan = Object.assign({ y: TG.TY }, TG.p);   // first plan year, same funnel and config inputs as the Investor plan, from the latest month (as the Investor tab)
   const runRate = W_(Math.max(0, Lk - 2), Lk).starts * 4, paceR = plan.starts ? runRate / plan.starts : null;
   const paceCol = paceR == null ? '#E8401C' : paceR >= 1 ? '#1F8A52' : paceR >= 0.5 ? '#B07218' : '#C0392B', paceBg = paceR == null ? 'var(--card)' : paceR >= 1 ? 'rgba(31,138,82,.08)' : paceR >= 0.5 ? 'rgba(176,114,24,.10)' : 'rgba(192,57,43,.08)';
   // ---- funnel: brands that started Phase 1 in the period, where they are now
@@ -1272,7 +1297,7 @@ function renderHeyMoon() {
  ${hot('Phase 1 starts · ' + cLab, w.starts, wp ? dN(w.starts, wp.starts) : '', (w.mig ? 'incl. ' + w.mig + ' migrated from Commission · ' : '') + (w.dir ? '+ ' + w.dir + ' direct entry · ' : '') + paidBy(k1).filter(br => !isDirect(br)).length + ' since launch')}
  ${hot('Scaled brands · ' + lab(k1), c.scaled, p ? dN(c.scaled, p.scaled) : '', 'Active at ladder level 2+ (incl. direct entry)')}
 </div></div>
-<div class="plan" style="border-left-color:${paceCol};background:${paceBg}"><b>Plan for ${plan.y}:</b> ${fmt.int(plan.starts)} Phase 1 starts, about ${fmt.int(plan.scaled)} scaled brands, ${vM(plan.arr)} ARR by year end. <b>Today:</b> ${fmt.int(runRate)} starts a year (run rate), ${c.scaled} scaled brands, ${vM(c.arr)} ARR. That needs about ${fmt.int(plan.starts / 12)} Phase 1 starts a month; the last 3 months averaged ${(runRate / 12).toFixed(0)}.</div>
+${TG.mode === 'track' ? hmTrack(TG, w.cac, vM) : `<div class="plan" style="border-left-color:${paceCol};background:${paceBg}"><b>Target for ${plan.y}:</b> ${fmt.int(plan.starts)} Phase 1 starts, about ${fmt.int(plan.scaled)} scaled brands, ${vM(plan.arr)} ARR by year end. <b>Today:</b> ${fmt.int(runRate)} starts a year (run rate), ${c.scaled} scaled brands, ${vM(c.arr)} ARR. That needs about ${fmt.int(plan.starts / 12)} Phase 1 starts a month; the last 3 months averaged ${(runRate / 12).toFixed(0)}.</div>`}
 <div class="sec"><h2 class="st">Economics</h2><div class="g4">
  ${tile('CAC · ' + rng(w.ew[0], w.ew[w.ew.length - 1]), vM(w.cac), wp ? dG(w.cac, wp.cac, true, null, wLab(wp)) : '', vM(w.csp) + ' ÷ ' + (w.cn || 0) + ' new brands' + (n < 3 ? ' · last 3 months (one month is too noisy)' : ''))}
  ${tile('Phase 1 → scaled · to ' + lab(k1), vP(c.convLo) + '–' + vP(c.convHi), '', c.p1n + ' scaled of brands that started on Phase 1; low = all started 2+ months ago, high = only brands whose Phase 1 has ended')}
@@ -1337,6 +1362,155 @@ ${watch.length ? `<table class="fun" style="width:100%;border-collapse:collapse"
     lineChart(document.getElementById('hm-c3'), { labels: labs, fullLabels: full, kind: 'num', series: [{ name: 'Active', color: 'var(--ink)', values: ks.map(k => activeAt(k)) }, { name: 'Paying (3 months)', color: 'var(--c-roas)', values: ks.map(k => (arpaAt(k, null) || { n: {} }).n.ROAS) }, { name: 'Scaled', color: '#1F8A52', values: ks.map(k => nm.filter(br => live(br, k) && isScaled(br, k)).length) }], height: 200, labelEvery: 1 });
     barChart(document.getElementById('hm-c4'), { labels: labs, fullLabels: full, stacked: true, series: [{ name: 'Brands in their first quarter', color: '#F0997B', values: ks.map(k => sum(nm.filter(br => sinceK(br) >= 0 && k - sinceK(br) < 3).map(br => br.monthly[k] || 0))) }, { name: 'Older brands', color: 'var(--c-roas)', values: ks.map(k => sum(nm.filter(br => sinceK(br) >= 0 && k - sinceK(br) >= 3).map(br => br.monthly[k] || 0))) }], height: 200, labelEvery: 1 });
   } catch (e) { console.error(e); }
+}
+
+/* ============================================================ Commission Summary and Commission Clients (spec locked with Kareem 25 Nov 2026; draft) */
+function commModel() {
+  const Lk = L(), ms = (D.merchants || []).filter(m => m.monthly), THR = ((M.config || {}).arpa || {}).min_paid_3m_usd || 250;
+  const sumA = a => a.reduce((s, v) => s + (v || 0), 0), win = (a, b) => { const o = []; for (let k = a; k <= b; k++) o.push(k); return o; };
+  const rv = (m, a, b) => a < 0 ? null : sumA(m.monthly.slice(a, b + 1));                    // client revenue (USD) over months a..b
+  const R = (a, b) => a < 0 ? null : sumA(S.rev_legacy.slice(Math.max(0, a), b + 1));        // Commission revenue as reported (incl. unallocated)
+  const isO = m => mtKey(m.name) === 'ounass', isMig = m => /migrated/i.test(m.status || ''), isEx = m => m.status === 'Existing';
+  const paying = k => k < 2 ? null : ms.filter(m => rv(m, k - 2, k) >= THR).length;
+  const nrrAt = k => { if (k - 14 < 0) return null; let a = 0, b = 0, keep = 0, n = 0; ms.forEach(m => { const x = rv(m, k - 14, k - 12); if (x > 0) { const y = Math.max(0, rv(m, k - 2, k)); a += x; b += y; keep += Math.min(x, y); n++; } }); return a ? { nrr: b / a, grr: keep / a, n, a, b } : null; };
+  const lastPaid = (m, k) => { for (let j = k; j >= 0; j--) if ((m.monthly[j] || 0) > 0) return j; return -1; };
+  const shares = (a, b) => { const v = ms.map(m => ({ m, v: rv(m, a, b) })).filter(x => x.v > 0).sort((x, y) => y.v - x.v), t = sumA(v.map(x => x.v)); return { list: v, tot: t, top1: t ? v[0].v / t : null, top3: t ? sumA(v.slice(0, 3).map(x => x.v)) / t : null }; };
+  // ROAS = GMV ÷ commission per client, data pack net sales by client (2026 Jan–Aug); fixed-fee clients on performance commission only
+  const roasOf = m => { const e = mtCommTTM(m.name); return (e && e.g && e.c) ? { g: e.g, c: e.c, r: e.g / e.c, perf: !!e.perf } : null; };
+  const roasAll = (() => { let g = 0, c = 0; ms.forEach(m => { const e = roasOf(m); if (e) { g += e.g; c += e.c; } }); return c ? { g, c, r: g / c } : null; })();
+  // watch list at the latest month: Existing and 3+ months without a payment, or last 3 months down 30%+ vs the same months last year (>= $5k last year)
+  const watch = ms.filter(m => !isMig(m)).map(m => { const lp = lastPaid(m, Lk), q = lp < 0 ? null : Lk - lp, a = rv(m, Lk - 14, Lk - 12), b = rv(m, Lk - 2, Lk);
+    const quiet = isEx(m) && q != null && q >= 3, drop = a >= 5000 && b / a - 1 <= -0.30; return { m, q, a, b, quiet, drop }; }).filter(x => x.quiet || x.drop)
+    .sort((x, y) => (y.a - y.b) - (x.a - x.b));
+  return { Lk, ms, THR, sumA, win, rv, R, isO, isMig, isEx, paying, nrrAt, lastPaid, shares, roasOf, roasAll, watch };
+}
+function commCss() { return `<style>.cm .plan{border-left:3px solid var(--teal);background:var(--card);padding:12px 18px;font-size:14px}.cm .hot{background:var(--teal);border-color:var(--teal)}.cm .fun td,.cm .fun th{padding:7px 10px;border-bottom:1px solid var(--rule);text-align:right;font-size:13.5px}.cm .fun td:first-child,.cm .fun th:first-child{text-align:left}.cm .fun th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);font-weight:600}.cm .g2c{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.cm .prov{border-left:3px solid var(--ochre);background:var(--card);padding:9px 14px;font-size:13px;color:var(--ink-2);margin:12px 0 0}.cm .pos{color:#1F8A52}.cm .neg{color:#C0392B}.cm .ctab td,.cm .ctab th{padding:6px 8px;border-bottom:1px solid var(--rule);text-align:right;font-size:12.5px;white-space:nowrap}.cm .ctab td:first-child,.cm .ctab th:first-child{text-align:left;position:sticky;left:0;background:var(--card)}.cm .ctab th{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600}.cm .ctab td.z{color:var(--ink-3)}.cm .tg{display:inline-block;font-size:10.5px;padding:1px 6px;border-radius:8px;background:var(--paper-2);color:var(--ink-3);margin-left:6px}.cm .tg.w{background:rgba(192,57,43,.1);color:#C0392B}@media(max-width:900px){.cm .g2c{grid-template-columns:1fr}}</style>`; }
+function commProvLine() { const prov = M.control.ounass.provisional_months.filter(m => !state.confirmed.has(m));
+  return prov.length ? `<div class="prov"><b>Provisional:</b> Ounass ${prov.map(fmt.month).join(' and ')} (Ounass confirms about 60 days after month end, so the latest 1–2 months are always provisional). ${addbackActive() ? 'The AED ' + fmt.int(M.control.ounass.buffer_aed) + ' monthly buffer is added back in these figures (header switch).' : 'Buffer held: these months show the reported Ounass figure (header switch).'}</div>` : ''; }
+function renderCommission() {
+  const root = document.getElementById('page-commission'); if (!root) return;
+  const C = commModel(), { Lk, ms, THR, sumA, win, rv, R, isO, isMig, isEx, paying, nrrAt, shares, roasAll, watch } = C;
+  const per = P[state.period] || P['TTM:' + M.latest_month];
+  const k0 = mtMonthK(per.start), k1 = Math.min(mtMonthK(per.end), Lk), n = k1 - k0 + 1, ly0 = k0 - 12, ly1 = k1 - 12, pk1 = k0 - 1, pk0 = k0 - n;
+  const lab = k => fmt.month(S.months[k]), rng = (a, b) => a === b ? lab(a) : lab(a) + '–' + lab(b), vM = x => fmt.money(x), vP = (x, d = 0) => x == null || isNaN(x) ? '—' : (x * 100).toFixed(d) + '%';
+  const cLab = rng(k0, k1), lyLab = ly0 >= 0 ? rng(ly0, ly1) : '—', pLab = pk0 >= 0 ? rng(pk0, pk1) : '—';
+  // change chips: last year leads (big), prior period in small text
+  const chip = (a, b, lower, kind) => { if (a == null || b == null || (kind !== 'pts' && kind !== 'n' && !b)) return null; const d = kind === 'pts' ? a - b : kind === 'n' ? a - b : a / b - 1, good = lower ? d <= 0 : d >= 0;
+    const t = kind === 'pts' ? (d >= 0 ? '+' : '−') + Math.abs(d * 100).toFixed(0) + ' pts' : kind === 'n' ? (d >= 0 ? '+' : '−') + Math.abs(d) : (d >= 0 ? '+' : '−') + Math.abs(d * 100).toFixed(0) + '%'; return { d, good, t }; };
+  const big = (c, vs) => c ? `<div class="val2" style="color:${c.d === 0 ? 'var(--ink-3)' : c.good ? '#1F8A52' : '#C0392B'}">${c.d > 0 ? '▲' : c.d < 0 ? '▼' : '■'} ${c.t} <span class="sm" style="font-weight:400">vs ${vs}</span></div>` : '';
+  const small = (c, vs) => c ? `<span>${c.t} vs ${vs}</span>` : '';
+  const hot = (l, v, cly, cp, s) => `<div class="cd hot" style="min-height:0"><p class="eb">${l}</p><div class="mid" style="color:#fff">${v}</div>${big(cly, lyLab).replace(/color:#1F8A52|color:#C0392B|color:var\(--ink-3\)/g, 'color:#fff').replace(/class="sm" style="font-weight:400"/g, 'style="font-weight:400;font-size:12.5px;color:rgba(255,255,255,.85)"')}<div class="sub" style="margin-top:4px">${[cp ? small(cp, pLab) : '', s].filter(Boolean).join(' · ')}</div></div>`;
+  const tile = (l, v, cly, cp, s) => `<div class="cd"><p class="eb">${l}</p><div class="mid">${v}</div>${big(cly, lyLab)}<div class="sm">${[cp ? small(cp, pLab) : '', s].filter(Boolean).join(' · ')}</div></div>`;
+  // ---- health row
+  const rev = R(k0, k1), revLY = R(ly0, ly1), revP = R(pk0, pk1);
+  const arr = S.arr_legacy[k1], arrLY = k1 >= 12 ? S.arr_legacy[k1 - 12] : null, arrP = pk1 >= 0 ? S.arr_legacy[pk1] : null, r12 = R(k1 - 11, k1), r12LY = k1 >= 23 ? R(k1 - 23, k1 - 12) : null;
+  const act = S.act_leg[k1], actLY = k1 >= 12 ? S.act_leg[k1 - 12] : null, actP = pk1 >= 0 ? S.act_leg[pk1] : null, pay = paying(k1), payLY = k1 >= 12 ? paying(k1 - 12) : null;
+  const nr = nrrAt(k1), nrLY = nrrAt(k1 - 12), nrP = nrrAt(pk1);
+  // ---- concentration row
+  const sh = shares(k0, k1), shLY = ly0 >= 0 ? shares(ly0, ly1) : null, shP = pk0 >= 0 ? shares(pk0, pk1) : null;
+  const exO = (a, b) => a < 0 ? null : sumA(ms.filter(m => !isO(m)).map(m => rv(m, a, b))), xo = exO(k0, k1), xoLY = exO(ly0, ly1), xoP = exO(pk0, pk1);
+  const oN = ms.find(isO), oc = oN ? rv(oN, k0, k1) : 0, ocLY = oN && ly0 >= 0 ? rv(oN, ly0, ly1) : null;
+  // ---- bridge vs same period last year (client revenue; unallocated difference shown so the bars add up to reported revenue)
+  const rows = ms.map(m => ({ m, a: ly0 >= 0 ? rv(m, ly0, ly1) : 0, b: rv(m, k0, k1) })).map(x => Object.assign(x, { d: x.b - x.a }));
+  const grp = { ounass: [], up: [], down: [], nw: [], stop: [], quiet: [], mig: [] };
+  rows.forEach(x => { if (!x.a && !x.b) return; if (isO(x.m)) grp.ounass.push(x); else if (x.a > 0 && x.b > 0) (x.d >= 0 ? grp.up : grp.down).push(x); else if (x.a <= 0 && x.b > 0) grp.nw.push(x);
+    else if (x.a > 0) (isMig(x.m) ? grp.mig : isEx(x.m) ? grp.quiet : grp.stop).push(x); else (x.d >= 0 ? grp.up : grp.down).push(x); });
+  const gs = g => sumA(g.map(x => x.d)), unal = (rev - (revLY || 0)) - sumA(rows.map(x => x.d));
+  const steps = [['Ounass', gs(grp.ounass), grp.ounass.length], ['Others growing', gs(grp.up), grp.up.length], ['Others declining', gs(grp.down), grp.down.length], ['New clients', gs(grp.nw), grp.nw.length],
+    ['Stopped (inactive)', gs(grp.stop), grp.stop.length], ['No revenue, still active', gs(grp.quiet), grp.quiet.length], ['Migrated to HeyMoon.ai', gs(grp.mig), grp.mig.length]];
+  if (Math.abs(unal) >= 500) steps.push(['Unallocated / adjustments', unal, null]);
+  const bridgeSvg = (() => { if (revLY == null) return '<p class="sm">No same period last year in the data.</p>'; const items = [['Last year', revLY, 'tot']].concat(steps.map(s => [s[0], s[1], 'd'])).concat([['This year', rev, 'tot']]);
+    let run = 0, lo = 0, hi = 0; const bars = items.map(([l, v, t]) => { let y0, y1; if (t === 'tot') { y0 = 0; y1 = v; run = v; } else { y0 = run; y1 = run + v; run = y1; } lo = Math.min(lo, y0, y1); hi = Math.max(hi, y0, y1); return { l, v, t, y0, y1 }; });
+    // axis starts near the smallest running total so the changes are readable (totals drawn from the axis floor; noted under the chart)
+    const runs = bars.map(b => Math.min(b.y0, b.y1)).filter((v, i) => bars[i].t !== 'tot').concat(bars.filter(b => b.t === 'tot').map(b => b.y1)), mn0 = Math.min(...runs), mxv = hi, span = mxv - mn0 || mxv, step = Math.pow(10, Math.floor(Math.log10(span)));
+    lo = Math.max(0, Math.floor((mn0 - span * 0.6) / step) * step); bars.forEach(b => { if (b.t === 'tot') b.y0 = lo; });
+    const W = 960, H = 260, pl = 10, pt = 22, pb = 44, ih = H - pt - pb, bw = (W - pl * 2) / bars.length, mx = mxv + (mxv - lo) * 0.06, y = v => pt + ih - (v - lo) / (mx - lo) * ih;
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Commission revenue bridge">` + bars.map((b, i) => { const x = pl + i * bw + bw * 0.18, w = bw * 0.64, top = y(Math.max(b.y0, b.y1)), h = Math.max(1, Math.abs(y(b.y0) - y(b.y1)));
+      const col = b.t === 'tot' ? 'var(--teal)' : b.v >= 0 ? '#1F8A52' : '#C0392B', val = b.t === 'tot' ? vM(b.v) : (b.v >= 0 ? '+' : '−') + vM(Math.abs(b.v));
+      const words = b.l.split(' '), l1 = words.slice(0, Math.ceil(words.length / 2)).join(' '), l2 = words.slice(Math.ceil(words.length / 2)).join(' ');
+      return `<rect x="${x.toFixed(1)}" y="${top.toFixed(1)}" width="${w.toFixed(1)}" height="${h.toFixed(1)}" fill="${col}" opacity="${b.t === 'tot' ? 1 : .85}"/><text x="${(x + w / 2).toFixed(1)}" y="${(top - 6).toFixed(1)}" text-anchor="middle" style="font:600 12px Inter;fill:var(--ink)">${val}</text><text x="${(x + w / 2).toFixed(1)}" y="${H - 26}" text-anchor="middle" style="font:11px Inter;fill:var(--ink-3)">${l1}</text><text x="${(x + w / 2).toFixed(1)}" y="${H - 12}" text-anchor="middle" style="font:11px Inter;fill:var(--ink-3)">${l2}</text>`; }).join('') + (lo > 0 ? `<text x="${pl}" y="12" style="font:11px Inter;fill:var(--ink-3)">Axis starts at ${vM(lo)}</text>` : '') + '</svg>'; })();
+  const movers = rows.filter(x => x.d !== 0), upT = movers.filter(x => x.d > 0).sort((a, b) => b.d - a.d).slice(0, 5), dnT = movers.filter(x => x.d < 0).sort((a, b) => a.d - b.d).slice(0, 5);
+  const mvRow = x => `<tr><td>${esc(x.m.name)}${isMig(x.m) ? '<span class="tg">migrated</span>' : ''}</td><td>${vM(x.a)}</td><td>${vM(x.b)}</td><td class="${x.d >= 0 ? 'pos' : 'neg'}">${x.d >= 0 ? '+' : '−'}${vM(Math.abs(x.d))}</td></tr>`;
+  const mvT = (t, a) => `<div><p class="eb">${t}</p><table class="fun" style="width:100%;border-collapse:collapse"><thead><tr><th>Client</th><th>${lyLab}</th><th>${cLab}</th><th>Change</th></tr></thead><tbody>${a.map(mvRow).join('') || '<tr><td colspan="4" class="sm">None</td></tr>'}</tbody></table></div>`;
+  const cnt = s => s[2] == null ? '' : ` (${s[2]})`;
+  // ---- watch list
+  const wRows = watch.map(x => `<tr><td>${esc(x.m.name)}</td><td>${x.m.segment || '—'}</td><td>${esc(x.m.status || '—')}</td><td>${vM(x.a)}</td><td>${vM(x.b)}</td><td class="${x.b - x.a >= 0 ? 'pos' : 'neg'}">${x.a ? vP(x.b / x.a - 1) : '—'}</td><td>${x.q == null ? '—' : x.q}</td><td style="text-align:left">${[x.quiet ? 'quiet 3+ months' : '', x.drop ? 'down 30%+' : ''].filter(Boolean).join(' · ')}</td></tr>`).join('');
+  const lg = arr => '<div class="sm" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:6px">' + arr.map(([col, t]) => `<span><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${col};margin-right:6px"></i>${t}</span>`).join('') + '</div>';
+  // ---- revenue target (config commission_plan): before the year 'target and pace needed', during it 'actual vs target'
+  const cpY = Object.keys((M.config || {}).commission_plan || {}).map(Number).sort((a, b) => a - b), yr1 = +S.months[k1].slice(0, 4), TYc = cpY.find(y => y >= yr1) || cpY[cpY.length - 1], CT = TYc ? commTarget(TYc) : null;
+  const tgtHtml = (() => { if (!CT) return ''; const baseTxt = `${CT.TY - 1} revenue ${vM(CT.base)}${CT.est ? ' (Jan–' + fmt.month(S.months[CT.kT0 - 12 + CT.done - 1]).slice(0, 3) + ' actual, rest of the year estimated from the seasonal pattern)' : ''}`;
+    if (yr1 < CT.TY) { const qs = [0, 1, 2, 3].map(q => [0, 1, 2].reduce((a, i) => a + CT.month(q * 3 + i), 0)), l12 = R(Lk - 11, Lk);
+      return `<div class="plan" style="border-left-color:var(--teal);margin-top:14px"><b>Target for ${CT.TY}:</b> revenue ${vM(CT.target)}, +${Math.round(CT.g * 100)}% on ${baseTxt}. Phased by the seasonal pattern: Q1 ${vM(qs[0])} · Q2 ${vM(qs[1])} · Q3 ${vM(qs[2])} · Q4 ${vM(qs[3])}. <b>Today:</b> ${vM(l12)} over the last 12 months, so the target needs ${vPct(CT.target / l12 - 1)} on that. Placeholder until the ${CT.TY} budget.</div>`; }
+    const a0 = Math.max(k0, CT.kT0), tP = win(a0, k1).reduce((a, k) => a + CT.month(k - CT.kT0), 0), aP = R(a0, k1), tY = win(CT.kT0, k1).reduce((a, k) => a + CT.month(k - CT.kT0), 0), aY = R(CT.kT0, k1);
+    return `<div class="plan" style="border-left-color:var(--ink);margin-top:14px"><b>${CT.TY} target vs actual</b> (full-year target ${vM(CT.target)}, +${Math.round(CT.g * 100)}% on ${baseTxt}; placeholder until the budget)
+<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:10px">${a0 <= k1 ? mtTgtCell('Revenue · ' + rng(a0, k1), aP, tP, vM) : ''}${mtTgtCell('Revenue · year to date', aY, tY, vM)}</div></div>`; })();
+  const ce = k1, cs = Math.max(0, ce - 23), ks = win(cs, ce);
+  root.innerHTML = commCss() + `<div class="inv cm" data-norename>
+<p class="eb" style="margin:0">Commission · summary · draft</p><h1 style="margin-top:4px">Commission · ${per.label || cLab}</h1>
+<p class="lead">Period from the header. Growth is compared with the same period last year (${lyLab}); the previous period (${pLab}) is shown in small text.</p>${commProvLine()}
+<div class="sec" style="margin-top:18px"><h2 class="st">Health</h2><div class="g4">
+ ${hot('Revenue · ' + cLab, vM(rev), chip(rev, revLY), chip(rev, revP), '')}
+ ${hot('ARR · ' + lab(k1), vM(arr), chip(arr, arrLY), chip(arr, arrP), 'seasonally adjusted · last 12 months revenue ' + vM(r12) + (r12LY ? ' (' + chip(r12, r12LY).t + ')' : ''))}
+ ${hot('Active · paying · ' + lab(k1), act + ' <span style="font-size:20px;color:rgba(255,255,255,.85)">· ' + (pay == null ? '—' : pay) + ' paying</span>', chip(act, actLY, false, 'n'), chip(act, actP, false, 'n'), 'paying = $' + THR + '+ in the last 3 months' + (payLY != null ? ' (' + payLY + ' a year ago)' : ''))}
+ ${hot('NRR · ' + (k1 >= 2 ? rng(k1 - 2, k1) : '—'), nr ? vP(nr.nrr) : '—', nr && nrLY ? chip(nr.nrr, nrLY.nrr, false, 'pts') : null, nr && nrP ? chip(nr.nrr, nrP.nrr, false, 'pts') : null, nr ? 'GRR ' + vP(nr.grr) + ' · ' + nr.n + ' clients: ' + vM(nr.a) + ' → ' + vM(nr.b) : '')}
+</div>${tgtHtml}</div>
+<div class="sec" style="margin-top:18px"><h2 class="st">Concentration</h2><div class="g4">
+ ${tile('Top client share · ' + cLab, vP(sh.top1), shLY ? chip(sh.top1, shLY.top1, true, 'pts') : null, shP ? chip(sh.top1, shP.top1, true, 'pts') : null, sh.list[0] ? esc(sh.list[0].m.name) + ' ' + vM(sh.list[0].v) : '')}
+ ${tile('Top 3 share · ' + cLab, vP(sh.top3), shLY ? chip(sh.top3, shLY.top3, true, 'pts') : null, shP ? chip(sh.top3, shP.top3, true, 'pts') : null, sh.list.slice(0, 3).map(x => esc(x.m.name)).join(', '))}
+ ${tile('Growth excl. Ounass', xoLY ? (xo / xoLY - 1 >= 0 ? '+' : '−') + vP(Math.abs(xo / xoLY - 1)) : '—', null, null, 'vs ' + lyLab + ': ' + vM(xoLY) + ' → ' + vM(xo) + (ocLY ? ' · Ounass ' + vM(ocLY) + ' → ' + vM(oc) + ' (' + chip(oc, ocLY).t + ')' : ''))}
+ ${tile('ROAS · Jan–Aug 2026', roasAll ? roasAll.r.toFixed(1) + '×' : '—', null, null, roasAll ? 'GMV ' + vM(roasAll.g) + ' ÷ commission ' + vM(roasAll.c) + ' (data pack, clients with GMV)' : '')}
+</div></div>
+<div class="sec"><h2 class="st">Why revenue moved · ${cLab} vs ${lyLab}</h2><div class="cd">${bridgeSvg}
+<div class="sm" style="margin-top:4px">${steps.map(s => `${s[0]}${cnt(s)}`).join(' · ')}. Stopped = paid last year, nothing this period, status Inactive. No revenue, still active = status Existing (between campaigns). Client revenue is from the data pack; any difference to reported revenue shows as unallocated.</div>
+<div class="g2c" style="margin-top:18px">${mvT('Top 5 up', upT)}${mvT('Top 5 down', dnT)}</div></div></div>
+<div class="sec"><h2 class="st">Trends · ${lab(cs)}–${lab(ce)}</h2><div class="g2c">
+ <div class="cd"><p class="eb">Revenue by month vs same month last year</p><div class="chart" id="cm-c1"></div>${lg([['var(--teal)', 'Revenue'], ['var(--ink)', 'Same month last year']])}</div>
+ <div class="cd"><p class="eb">Revenue by segment</p><div class="chart" id="cm-c2"></div>${lg([['#0B5E6E', 'Ounass'], ['var(--teal)', 'Enterprise excl. Ounass'], ['var(--ochre)', 'Growth'], ['var(--violet)', 'SME']])}</div>
+ <div class="cd"><p class="eb">Concentration · share of client revenue, last 3 months</p><div class="chart" id="cm-c3"></div>${lg([['var(--ink)', 'Top client'], ['var(--teal)', 'Top 3']])}</div>
+ <div class="cd"><p class="eb">NRR · last 3 months vs same 3 months last year</p><div class="chart" id="cm-c4"></div>${lg([['var(--teal)', 'NRR'], ['var(--ink-3)', 'GRR']])}</div>
+</div></div>
+<div class="sec"><h2 class="st">Watch list · ${lab(Lk)}</h2><div class="cd">${wRows ? `<table class="fun" style="width:100%;border-collapse:collapse"><thead><tr><th>Client</th><th>Segment</th><th>Status</th><th>${rng(Lk - 14, Lk - 12)}</th><th>${rng(Lk - 2, Lk)}</th><th>Change</th><th>Months quiet</th><th style="text-align:left">Why</th></tr></thead><tbody>${wRows}</tbody></table>` : '<p class="sm">No clients on the watch list.</p>'}
+<div class="sm" style="margin-top:8px">Quiet = status Existing and 3+ months without a payment. Down 30%+ = last 3 months vs the same 3 months last year, clients with at least $5k last year. Sorted by revenue lost. Every client: <a href="#" data-goto="commclients">Commission Clients</a>.</div></div></div>
+<details><summary>Definitions</summary><dl>
+<dt>Revenue</dt><dd>Commission revenue in the period as reported (USD), incl. the Ounass buffer when the header switch adds it back.</dd>
+<dt>ARR</dt><dd>Seasonally adjusted run rate: the last 3 months, each divided by that month's usual share of the year (average of the last 2 full years, recalculated each January), averaged. Revenue over the last 12 months is shown alongside as the season-free view.</dd>
+<dt>Active · paying</dt><dd>Active = client status Existing. Paying = paid at least $${THR} in the last 3 months.</dd>
+<dt>NRR / GRR</dt><dd>Revenue in the last 3 months from clients that paid in the same 3 months a year earlier, ÷ what they paid then. GRR caps each client at its earlier level. Migrated clients count as lost.</dd>
+<dt>Concentration</dt><dd>Share of client revenue in the period from the largest client and the largest three.</dd>
+<dt>ROAS</dt><dd>GMV ÷ commission for clients with GMV in the data pack, 2026 Jan–Aug (the window of the net sales by client file). Fixed-fee clients use performance commission only. Not the HeyMoon.ai ladder ROAS.</dd>
+<dt>Bridge</dt><dd>Change in revenue vs the same period last year, client by client. A client paying in both periods is growing or declining; paying only this period is new; paying only last year is stopped (Inactive), still active (Existing) or migrated to HeyMoon.ai.</dd>
+</dl></details></div>`;
+  root.querySelectorAll('[data-goto]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); const b = document.querySelector('#tabs button[data-page="' + a.dataset.goto + '"]'); if (b) b.click(); }));
+  try {
+    const labs = ks.map(lab), full = ks.map(k => fmt.monthLong(S.months[k]));
+    barChart(document.getElementById('cm-c1'), { labels: labs, fullLabels: full, stacked: false, height: 200, labelEvery: 2, series: [{ name: 'Revenue', color: 'var(--teal)', values: ks.map(k => S.rev_legacy[k]) }], lines: [{ name: 'Same month last year', color: 'var(--ink)', values: ks.map(k => k >= 12 ? S.rev_legacy[k - 12] : null) }] });
+    const segOf = (m, k) => (m.seg_monthly && m.seg_monthly[k]) || m.segment, segV = (k, f) => sumA(ms.filter(m => f(m, k)).map(m => m.monthly[k] || 0));
+    barChart(document.getElementById('cm-c2'), { labels: labs, fullLabels: full, stacked: true, height: 200, labelEvery: 2, series: [
+      { name: 'Ounass', color: '#0B5E6E', values: ks.map(k => segV(k, m => isO(m))) }, { name: 'Enterprise excl. Ounass', color: 'var(--teal)', values: ks.map(k => segV(k, (m, j) => !isO(m) && segOf(m, j) === 'Enterprise')) },
+      { name: 'Growth', color: 'var(--ochre)', values: ks.map(k => segV(k, (m, j) => segOf(m, j) === 'Growth')) }, { name: 'SME', color: 'var(--violet)', values: ks.map(k => segV(k, (m, j) => segOf(m, j) === 'SME')) }] });
+    const shK = ks.map(k => k >= 2 ? shares(k - 2, k) : null);
+    lineChart(document.getElementById('cm-c3'), { labels: labs, fullLabels: full, kind: 'pct', height: 200, labelEvery: 2, minVal: 0, series: [{ name: 'Top client', color: 'var(--ink)', values: shK.map(s => s ? s.top1 : null) }, { name: 'Top 3', color: 'var(--teal)', values: shK.map(s => s ? s.top3 : null) }] });
+    const nK = ks.map(k => nrrAt(k));
+    lineChart(document.getElementById('cm-c4'), { labels: labs, fullLabels: full, kind: 'pct', height: 200, labelEvery: 2, minVal: 0, series: [{ name: 'NRR', color: 'var(--teal)', values: nK.map(x => x ? x.nrr : null) }, { name: 'GRR', color: 'var(--ink-3)', values: nK.map(x => x ? x.grr : null) }] });
+  } catch (e) { console.error(e); }
+}
+function renderCommClients() {
+  const root = document.getElementById('page-commclients'); if (!root) return;
+  const C = commModel(), { Lk, ms, THR, sumA, win, rv, isMig, lastPaid, roasOf, watch } = C, lab = k => fmt.month(S.months[k]), vM = x => fmt.money(x);
+  const ks = win(Lk - 11, Lk), all = !!state.commAll, wSet = new Set(watch.map(x => x.m.name));
+  const tot12 = sumA(ms.map(m => rv(m, Lk - 11, Lk)));
+  const rows = ms.map(m => ({ m, t: rv(m, Lk - 11, Lk), a: rv(m, Lk - 14, Lk - 12), b: rv(m, Lk - 2, Lk), lp: lastPaid(m, Lk), ro: roasOf(m) })).filter(x => all || x.t >= THR).sort((x, y) => y.t - x.t || x.m.name.localeCompare(y.m.name));
+  const cell = v => v ? `<td>${fmt.money(v)}</td>` : '<td class="z">—</td>';
+  const body = rows.map(x => `<tr><td>${esc(x.m.name)}${isMig(x.m) ? '<span class="tg">migrated</span>' : ''}${wSet.has(x.m.name) ? '<span class="tg w">watch</span>' : ''}</td><td style="text-align:left">${x.m.segment || '—'}</td><td style="text-align:left">${esc((x.m.status || '—').replace('Migrated to ROAS', 'Migrated'))}</td><td>${x.ro ? x.ro.r.toFixed(1) + '×' + (x.ro.perf ? ' <span class="sm" title="tracked commission includes fixed-fee campaigns; ROAS on performance commission only">perf.</span>' : '') : '<span class="z">—</span>'}</td><td>${x.ro ? vM(x.ro.g) : '<span class="z">—</span>'}</td>${ks.map(k => cell(x.m.monthly[k])).join('')}<td><b>${vM(x.t)}</b></td>
+    <td class="${x.b - x.a >= 0 ? 'pos' : 'neg'}">${x.a || x.b ? (x.b - x.a >= 0 ? '+' : '−') + vM(Math.abs(x.b - x.a)) : '—'}</td><td class="${x.b - x.a >= 0 ? 'pos' : 'neg'}">${x.a > 0 ? fmt.pctS(x.b / x.a - 1, 0) : x.b > 0 ? 'new' : '—'}</td><td>${tot12 ? (x.t / tot12 * 100).toFixed(1) + '%' : '—'}</td>
+    <td>${x.lp >= 0 ? lab(x.lp) : '—'}</td><td>${x.lp >= 0 ? Lk - x.lp : '—'}</td></tr>`).join('');
+  const hidden = ms.length - rows.length;
+  root.innerHTML = commCss() + `<div class="inv cm" data-norename><p class="eb" style="margin:0">Commission · clients · draft</p><h1 style="margin-top:4px">Commission clients · 12 months to ${lab(Lk)}</h1>
+<p class="lead">One row per client, sorted by revenue over the last 12 months. ${all ? 'Showing all ' + ms.length + ' clients.' : 'Showing clients that paid at least $' + THR + ' in the last 12 months (' + rows.length + '); ' + hidden + ' hidden.'} <a href="#" id="cm-all">${all ? 'Show paying clients only' : 'Show all'}</a></p>${commProvLine()}
+<div class="cd" style="margin-top:14px;padding:0;overflow-x:auto"><table class="ctab" style="width:100%;border-collapse:collapse"><thead><tr><th>Client</th><th style="text-align:left">Segment</th><th style="text-align:left">Status</th><th>ROAS</th><th>GMV</th>${ks.map(k => `<th>${lab(k)}</th>`).join('')}<th>12 months</th><th colspan="2">${lab(Lk - 2)}–${lab(Lk)} vs last year</th><th>Share</th><th>Last paid</th><th>Months quiet</th></tr></thead><tbody>${body}</tbody>
+<tfoot><tr><td><b>Total (shown)</b></td><td></td><td></td><td></td><td></td>${ks.map(k => `<td><b>${vM(sumA(rows.map(x => x.m.monthly[k] || 0)))}</b></td>`).join('')}<td><b>${vM(sumA(rows.map(x => x.t)))}</b></td><td colspan="5"></td></tr></tfoot></table></div>
+<div class="sm" style="margin-top:10px">Revenue in USD from the data pack (client revenue; small differences to reported Commission revenue are unallocated). GMV and ROAS (GMV ÷ commission) are 2026 Jan–Aug from the data pack's net sales by client file; "perf." = fixed-fee client, ROAS on performance commission only. Migrated = moved to HeyMoon.ai, Commission revenue up to the move. Watch = on the Commission Summary watch list.</div></div>`;
+  const t = document.getElementById('cm-all'); if (t) t.addEventListener('click', e => { e.preventDefault(); state.commAll = !state.commAll; renderCommClients(); });
 }
 
 function renderAnnual() {
@@ -2248,8 +2422,14 @@ function renderSegmentation() {
       const cats = [];
       for (let i = start + 1; i < end; i++) { const r = rows[i]; const name = String(r[0] || '').trim(); if (!name) continue; const aed = vals(r); cats.push({ name, usd: aed.map(v => v == null ? null : v / CAC_AED_PER_USD) }); }
       const usdRow = findRow(totalUsdLabel), aedRow = findRow(totalAedLabel);
-      const costUSD = usdRow ? vals(usdRow) : (aedRow ? vals(aedRow).map(v => v == null ? null : v / CAC_AED_PER_USD) : months.map(() => null));
-      return { cats, costUSD };
+      let costUSD = usdRow ? vals(usdRow) : (aedRow ? vals(aedRow).map(v => v == null ? null : v / CAC_AED_PER_USD) : months.map(() => null));
+      // V2 2026-11-25 (Kareem): Marketing Events left out of spend up to Sep-26 (investor-acquisition events, excluded per Haneen) and included from Oct-26 (client-acquisition marketing); confirmed by the CAC sheet owner 26 Nov; config cac.exclude_categories, cac.exclude_until
+      const cc = ((typeof M !== 'undefined' && M && M.config && M.config.cac) || {}), exN = (cc.exclude_categories || ['Marketing Events']).map(norm), until = cc.exclude_until || '2026-09';
+      const ex = cats.filter(c => exN.includes(norm(c.name)));
+      // spend = sum of categories (the sheet's total line includes events in some months only); events counted only after the cut-off month
+      if (ex.length) costUSD = costUSD.map((v, i) => { if (v == null) return null; const key = months[i].y + '-' + String(months[i].m).padStart(2, '0');
+        return cats.filter(c => key > until || !exN.includes(norm(c.name))).reduce((a, c) => a + (c.usd[i] || 0), 0); });
+      return { cats, costUSD, excluded: ex.map(c => c.name) };
     }
     const merchant = section('MERCHANT CAC', 'Total Merchant Cost — USD', 'Total Merchant Cost — AED');
     const creator = section('CREATOR CAC', 'Total Creator Cost — USD', 'Total Creator Cost — AED');
@@ -2331,8 +2511,8 @@ function renderSegmentation() {
       cacYear = (saved && yrs.includes(saved)) ? saved : (yrs.includes(2026) ? 2026 : yrs[yrs.length - 1]);
       renderCac();
       // publish live blended merchant CAC (current year YTD) for LTV:CAC on KPIs / Investor / Segmentation
-      try { const sp = {}, ct = {}; PARSED.months.forEach((mm, i) => { const key = mm.y + '-' + String(mm.m).padStart(2, '0'); sp[key] = PARSED.merchant.costUSD[i]; ct[key] = PARSED.merchant.count[i]; });
-        MT_CAC_SHEET = { ok: true, spend: sp, count: ct }; } catch (e) { MT_CAC_SHEET = { ok: false, err: String(e && e.message || e) }; }
+      try { const sp = {}, ct = {}, csp = {}, cct = {}; PARSED.months.forEach((mm, i) => { const key = mm.y + '-' + String(mm.m).padStart(2, '0'); sp[key] = PARSED.merchant.costUSD[i]; ct[key] = PARSED.merchant.count[i]; csp[key] = PARSED.creator.costUSD[i]; cct[key] = PARSED.creator.count[i]; });
+        MT_CAC_SHEET = { ok: true, spend: sp, count: ct, creatorSpend: csp, creatorCount: cct }; } catch (e) { MT_CAC_SHEET = { ok: false, err: String(e && e.message || e) }; }
       try { if (typeof renderAll === 'function' && M) renderAll(); } catch (e) {}
       try { const launch = (M && M.config && M.config.roas_status && M.config.roas_status.launch_month) || '2025-11'; const cutK = (typeof MT_CUT === 'string' && MT_CUT) ? MT_CUT : (M && M.latest_month);   // 'YYYY-MM' update date
         const byMonth = {}; let cost = 0, n = 0;

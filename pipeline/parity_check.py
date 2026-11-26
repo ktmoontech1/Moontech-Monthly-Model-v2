@@ -3,8 +3,8 @@ import asyncio, os
 # needs playwright; run after bundle.py: python3 pipeline/parity_check.py (CAC sheet values below are test values; parity does not depend on them)
 PREVIEW='file://'+os.path.join(os.path.dirname(os.path.abspath(__file__)),'..','preview.html')
 from playwright.async_api import async_playwright
-sp={'2025-11':13960.56,'2025-12':14859.93,'2026-01':2259.57,'2026-02':6721.17,'2026-03':6419.3,'2026-04':6963.76,'2026-05':7546.79,'2026-06':8135.54,'2026-07':7905.99,'2026-08':8227.57,'2026-09':13206.24,'2026-10':17633.75}
-ct=dict(zip(sp,[1,0,2,1,3,3,5,3,8,4,9,5]))
+sp={'2025-10':5636,'2025-11':5564,'2025-12':5533,'2026-01':2259.57,'2026-02':6721.17,'2026-03':6419.3,'2026-04':6963.76,'2026-05':7546.79,'2026-06':8135.54,'2026-07':7905.99,'2026-08':8227.57,'2026-09':13206.24,'2026-10':17633.75}
+ct=dict(zip(sp,[0,1,0,2,1,3,3,5,3,8,4,9,5]))
 async def main():
   async with async_playwright() as p:
     b=await p.chromium.launch(); pg=await b.new_page(viewport={'width':1440,'height':1000}); errs=[]; pg.on('pageerror',lambda e: errs.append(str(e)))

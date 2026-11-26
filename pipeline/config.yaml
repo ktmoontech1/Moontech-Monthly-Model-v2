@@ -25,6 +25,8 @@ roas_status:                             # [§7] ladder brands
 cac:                                     # V2 2026-11-17 (Kareem): source = live CAC sheet spend; brand count from the ladder
   brand_count: ladder_first_paid             # V2 2026-11-18 (Kareem): brands that have paid (first payment month), INCLUDING brands migrated from commission (migrations count as new clients); excluded brands (Touche Prive) out; refunded brands and Jetour count
   fallback: none                         # no fallback: a month without spend shows CAC as —
+  exclude_categories: ["Marketing Events"]   # V2 2026-11-25/26 (Kareem; confirmed by the CAC sheet owner): Marketing Events up to Sep-26 were investor-acquisition events (excluded, per Haneen); from Oct-26 they are client-acquisition marketing (included)
+  exclude_until: "2026-09"
 
 investor:                                # V2 page settings (agreed with Kareem 16-17 Nov 2026); index.html reads these
   arpa_method: paying_customers_3m       # V2 2026-11-18 (Kareem): ARPA = ARR ÷ customers that paid >= arpa.min_paid_3m_usd in the same 3 months; every group, both businesses
@@ -42,6 +44,9 @@ arpa:
   point_in_time_growth: vs_3_months_earlier
   nrr_upgrade_basis: calendar_quarter    # NRR and upgrade rate: latest complete quarter vs the one before (answers the open point in Changes post handover)
   ounass_default: added_back             # one ARR everywhere; Investor page always adds the buffer back and says the months are provisional
+
+commission_plan:                         # V2 2026-11-25 (Kareem): Commission revenue target, placeholder until the 2027 budget; base = prior calendar year revenue (Nov-Dec estimated from the seasonal weights until actual), phased by month with the same weights
+  2027: {revenue_growth: 0.20}
 
 plan:                                    # V2 2026-11-16 (Kareem, option B): Investor Metrics v7.1 method, YE of the update year calculated on dashboard actuals; 2027-2030 = v7.1 inputs
   source: "Investor Metrics v7.1 method, calculated on dashboard actuals"
