@@ -883,6 +883,12 @@ function mtInvExportBind() {   // standalone, name-free investor page from the r
 // A4 print layout for the investor page: page at 1180px scaled to A4 width, cards and sections kept whole, colours printed
 const MT_INV_PRINT_CSS = '<style>@page{size:A4;margin:10mm}@media print{html,body{background:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.wrapx{width:1180px;max-width:none;zoom:.6;padding:0}.cd,.pt tr,.g4>*,.plan,details,.hot,svg{break-inside:avoid;page-break-inside:avoid}h1,h2,.st,.eb{break-after:avoid;page-break-after:avoid}.sec{break-inside:auto}.inv .g4{grid-template-columns:repeat(4,minmax(0,1fr))!important}.inv .g3,.inv .steps{grid-template-columns:repeat(3,minmax(0,1fr))!important}.inv dl{grid-template-columns:220px 1fr!important}}</style>';
 
+// period labels (26 Nov, Kareem): a calendar quarter reads Q3-26, a calendar year 2026, months in one year Aug–Oct-26, otherwise Nov-25–Jan-26
+function mtRangeLab(a, b) { const ym = k => S.months[k], lab = k => fmt.month(ym(k)); if (a == null || b == null || a < 0 || !ym(a) || !ym(b)) return '—'; if (a === b) return lab(a);
+  const y0 = ym(a).slice(0, 4), y1 = ym(b).slice(0, 4), m0 = +ym(a).slice(5, 7), m1 = +ym(b).slice(5, 7);
+  if (y0 === y1 && m0 === 1 && m1 === 12) return y0;
+  if (y0 === y1 && b - a === 2 && m0 % 3 === 1) return 'Q' + ((m0 + 2) / 3) + '-' + y0.slice(2);
+  return y0 === y1 ? lab(a).slice(0, 3) + '–' + lab(b) : lab(a) + '–' + lab(b); }
 /* ============================================================ HeyMoon.ai metrics: one calculation for the Investor tab and the HeyMoon.ai page (25 Nov 2026) */
 function hmModel(I) {
   const { nm, sum, win, sinceK, churnK, paidBy, churnedBy, activeAt, nmRev, nmRet, launchK, NM_MARGIN } = I;
@@ -964,7 +970,7 @@ function renderInvestor() {
   const pv = (v, f) => `<td class="plan">${v == null ? 'n/a' : f(v)}</td>`;
   const R = (metric, v, f, gv, gk, lower, date, ye, y5, def, vs) => `<tr><td>${metric}</td>${td(v, f)}${gk === 'na' ? '<td class="na">n/a</td>' : gcell(gv, gk, lower, vs)}<td class="muted small">${date}</td>${pv(ye, f)}${pv(y5, f)}<td class="muted small" style="text-align:left;white-space:normal;min-width:300px">${def}</td></tr>`;
   const SEC = label => `<tr class="sec"><td colspan="7">${label}</td></tr>`;
-  const fm = money, i0 = fmt.int, w3 = ks => fmt.month(S.months[ks[0]]) + '–' + fmt.month(S.months[ks[2]]);
+  const fm = money, i0 = fmt.int, w3 = ks => mtRangeLab(ks[0], ks[2]);
   const cW = win(Lk - 2, Lk), pW = win(Lk - 5, Lk - 3);
   let T = `<table class="t"><thead><tr><th style="text-align:left">Metric</th><th>Current</th><th>Growth</th><th>Date</th><th class="plan">YE ${PL.yr}</th><th class="plan">Y5 (${py5.year})</th><th style="text-align:left">Definition</th></tr></thead><tbody>`;
   T += SEC('HeyMoon.ai');
@@ -1247,7 +1253,7 @@ function renderHeyMoon() {
   const I = computeInvestor(); const { nm, sum, win, sinceK, churnK, paidBy, churnedBy, activeAt, nmRev, nmRet, upgrade, launchK, NM_MARGIN } = I;
   const Lk = L(), per = P[state.period] || P['TTM:' + M.latest_month];
   const k0 = mtMonthK(per.start), k1 = Math.min(mtMonthK(per.end), Lk), n = k1 - k0 + 1, pk1 = k0 - 1, pk0 = k0 - n;
-  const mOf = ks => ks.map(k => S.months[k]), lab = k => fmt.month(S.months[k]), rng = (a, b) => a === b ? lab(a) : lab(a) + '–' + lab(b);
+  const mOf = ks => ks.map(k => S.months[k]), lab = k => fmt.month(S.months[k]), rng = mtRangeLab;
   const H = hmModel(I), { THR, DIRECT, lvl, entryLvl, isDirect, isScaled, live, paid3, w3 } = H;   // shared HeyMoon.ai calculation (same as the Investor tab)
   const vM = x => { if (x == null || isNaN(x)) return '—'; const a = Math.abs(x); return a >= 1e6 ? '$' + (x / 1e6).toFixed(2) + 'M' : a >= 1e4 ? '$' + Math.round(x / 1e3) + 'k' : a >= 1e3 ? '$' + (x / 1e3).toFixed(1) + 'k' : '$' + Math.round(x); };
   const vP = (x, d = 0) => x == null || isNaN(x) ? '—' : (x * 100).toFixed(d) + '%';
@@ -1401,7 +1407,7 @@ function renderCommission() {
   const C = commModel(), { Lk, ms, THR, sumA, win, rv, R, isO, isMig, isEx, paying, nrrAt, shares, roasAll, watch } = C;
   const per = P[state.period] || P['TTM:' + M.latest_month];
   const k0 = mtMonthK(per.start), k1 = Math.min(mtMonthK(per.end), Lk), n = k1 - k0 + 1, ly0 = k0 - 12, ly1 = k1 - 12, pk1 = k0 - 1, pk0 = k0 - n;
-  const lab = k => fmt.month(S.months[k]), rng = (a, b) => a === b ? lab(a) : lab(a) + '–' + lab(b), vM = x => fmt.money(x), vP = (x, d = 0) => x == null || isNaN(x) ? '—' : (x * 100).toFixed(d) + '%';
+  const lab = k => fmt.month(S.months[k]), rng = mtRangeLab, vM = x => fmt.money(x), vP = (x, d = 0) => x == null || isNaN(x) ? '—' : (x * 100).toFixed(d) + '%';
   const cLab = rng(k0, k1), lyLab = ly0 >= 0 ? rng(ly0, ly1) : '—', pLab = pk0 >= 0 ? rng(pk0, pk1) : '—';
   // change chips: last year leads (big), prior period in small text
   const chip = (a, b, lower, kind) => { if (a == null || b == null || (kind !== 'pts' && kind !== 'n' && !b)) return null; const d = kind === 'pts' ? a - b : kind === 'n' ? a - b : a / b - 1, good = lower ? d <= 0 : d >= 0;
@@ -1522,78 +1528,109 @@ function renderCommClients() {
   const t = document.getElementById('cm-all'); if (t) t.addEventListener('click', e => { e.preventDefault(); state.commAll = !state.commAll; renderCommClients(); });
 }
 
-/* ============================================================ Creators (draft, 26 Nov 2026): the metrics management asks for, decisions in the restructure plan section 14 */
+/* ============================================================ Creators (draft v3, 26 Nov 2026): scorecard (management's list) · funnel · creators we rely on · creators on the way up */
 function renderCreators() {
   const root = document.getElementById('page-creators'); if (!root) return;
   const C = (D.series || {}).creators || S.creators; if (!C) { root.innerHTML = '<p class="sm">No creator data.</p>'; return; }
   const Lk = L(), per = P[state.period] || P['TTM:' + M.latest_month];
   const k0 = mtMonthK(per.start), k1 = Math.min(mtMonthK(per.end), Lk), n = k1 - k0 + 1, ly0 = k0 - 12, ly1 = k1 - 12, pk1 = k0 - 1, pk0 = k0 - n;
   const sumA = a => a.reduce((s, v) => s + (v || 0), 0), win = (a, b) => { const o = []; for (let k = a; k <= b; k++) o.push(k); return o; };
-  const sumK = (arr, a, b) => a < 0 ? null : sumA((arr || []).slice(a, b + 1));
-  const lab = k => fmt.month(S.months[k]), rng = (a, b) => a === b ? lab(a) : lab(a) + '–' + lab(b), vM = x => fmt.money(x), vN = x => x == null ? '—' : fmt.int(x), vP = (x, d = 0) => x == null || isNaN(x) ? '—' : (x * 100).toFixed(d) + '%';
+  const sumK = (arr, a, b) => a < 0 || !arr ? null : sumA(arr.slice(a, b + 1));
+  const lab = k => fmt.month(S.months[k]), rng = mtRangeLab, vM = x => fmt.money(x), vN = x => x == null ? '—' : fmt.int(x), vP = (x, d = 0) => x == null || isNaN(x) ? '—' : (x * 100).toFixed(d) + '%';
   const cLab = rng(k0, k1), lyLab = ly0 >= 0 ? rng(ly0, ly1) : '—', pLab = pk0 >= 0 ? rng(pk0, pk1) : '—';
-  // creator spend from the live CAC sheet (by 'YYYY-MM'); new active creators = first month a creator reaches the active bar (model)
   const csp = k => { const s = (typeof MT_CAC_SHEET !== 'undefined' && MT_CAC_SHEET && MT_CAC_SHEET.creatorSpend) || null; if (!s) return null; const v = s[S.months[k]]; return v == null ? null : v; };
-  const ads = S.ads || [];
-  // metrics for a window a..b
+  const spendK = (a, b) => { const v = win(a, b).map(csp); return v.every(x => x != null) ? sumA(v) : null; };
+  const ads = S.ads || [], ADS_FROM = mtMonthK('2025-06');   // closed-ads counting changed in May-25: no comparison reaching back before Jun-25
+  const CL = (D.creator_list || (RAW.base || {}).creator_list || []);
+  const base = k => (C.active[k] || 0) + (C.emerging[k] || 0);   // creators with an order in the last 6 months
+  // ---- window metrics
   const W_ = (a, b) => { if (a < 0) return null; const ks = win(a, b), yr0 = mtMonthK(S.months[b].slice(0, 4) + '-01');
-    const nA = sumK(C.first_active, a, b), adsN = sumK(ads, a, b), actSum = sumK(C.active, a, b), spK = ks.map(csp), spOk = spK.every(v => v != null);
-    const ca0 = Math.max(0, b - 2), caKs = n < 3 ? win(ca0, b) : ks, caSp = caKs.map(csp), caOk = caSp.every(v => v != null), caN = sumK(C.first_active, caKs[0], caKs[caKs.length - 1]);
-    return { active: C.active[b], emerging: C.emerging[b], newA: nA, cum: sumK(C.first_active, yr0, b), ads: adsN, freq: actSum ? adsN / actSum : null, churned: sumK(C.churned, a, b), react: sumK(C.react, a, b),
-      major: C.major[b], orders: sumK(C.orders_total, a, b), majShare: sumK(C.orders_total, a, b) ? sumK(C.orders_major, a, b) / sumK(C.orders_total, a, b) : null,
-      opa: actSum ? sumK(C.orders_active, a, b) / actSum : null, cacSp: caOk ? sumA(caSp) : null, cacN: caN, cac: (caOk && caN) ? sumA(caSp) / caN : null, cacKs: caKs }; };
-  const c = W_(k0, k1), ly = W_(ly0, ly1), p = W_(pk0, pk1);
-  // chips: last year leads, prior period in small text (as Commission)
-  const chip = (a, b, lower, kind) => { if (a == null || b == null || (kind !== 'n' && !b)) return null; const d = kind === 'n' ? a - b : a / b - 1, good = lower ? d <= 0 : d >= 0;
-    return { d, good, t: kind === 'n' ? (d >= 0 ? '+' : '−') + fmt.int(Math.abs(d)) : (d >= 0 ? '+' : '−') + Math.abs(d * 100).toFixed(0) + '%' }; };
+    const post = ks.map(k => (C.posters || [])[k]), postOk = post.every(v => v != null && v > 0), adsN = sumK(ads, a, b);
+    const caKs = n < 3 ? win(Math.max(0, b - 2), b) : ks, caSp = spendK(caKs[0], caKs[caKs.length - 1]), caN = sumK(C.first_active, caKs[0], caKs[caKs.length - 1]);
+    const ord = sumK(C.orders_total, a, b), top = CL.map(c => sumA(c.o.slice(a, b + 1))).sort((x, y) => y - x);
+    return { active: C.active[b], base: base(b), share: base(b) ? C.active[b] / base(b) : null, newA: sumK(C.first_active, a, b), back: sumK(C.react, a, b), churned: sumK(C.churned, a, b),
+      cum: sumK(C.first_active, yr0, b), rec: sumK(C.coh_rec || C.recruited, a, b), ads: adsN, freq: postOk ? adsN / sumA(post) : null, posters: postOk ? Math.round(sumA(post) / ks.length) : null, adsOk: a >= ADS_FROM,
+      cacSp: caSp, cacN: caN, cac: (caSp != null && caN) ? caSp / caN : null, cacKs: caKs, orders: ord, top10: ord ? sumA(top.slice(0, 10)) / ord : null, major: C.major[b] }; };
+  const c = W_(k0, k1), ly = W_(ly0, ly1), p = W_(pk0, pk1), g = (o, f) => o ? o[f] : null;
+  // ---- chips: last year leads, prior period in small text
+  const chip = (a, b, lower, kind) => { if (a == null || b == null || (kind !== 'n' && kind !== 'pts' && !b)) return null; const d = kind === 'n' || kind === 'pts' ? a - b : a / b - 1, good = lower ? d <= 0 : d >= 0;
+    return { d, good, t: kind === 'n' ? (d >= 0 ? '+' : '−') + fmt.int(Math.abs(d)) : kind === 'pts' ? (d >= 0 ? '+' : '−') + Math.abs(d * 100).toFixed(0) + ' pts' : (d >= 0 ? '+' : '−') + Math.abs(d * 100).toFixed(0) + '%' }; };
   const big = (x, vs, hot) => x ? `<div class="val2" style="color:${hot ? '#fff' : x.d === 0 ? 'var(--ink-3)' : x.good ? '#1F8A52' : '#C0392B'}">${x.d > 0 ? '▲' : x.d < 0 ? '▼' : '■'} ${x.t} <span style="font-weight:400;font-size:12.5px;${hot ? 'color:rgba(255,255,255,.85)' : 'color:var(--ink-3)'}">vs ${vs}</span></div>` : '';
   const small = (x, vs) => x ? `${x.t} vs ${vs}` : '';
-  const tileF = hot => (l, v, cly, cp, s) => `<div class="cd${hot ? ' hot' : ''}" style="min-height:0"><p class="eb">${l}</p><div class="mid"${hot ? ' style="color:#fff"' : ''}>${v}</div>${big(cly, lyLab, hot)}<div class="${hot ? 'sub' : 'sm'}" style="margin-top:4px">${[cp ? small(cp, pLab) : '', s].filter(Boolean).join(' · ')}</div></div>`;
-  const hot = tileF(true), tile = tileF(false), g = (o, f) => o ? o[f] : null;
-  const yr = S.months[k1].slice(0, 4), cacLab = c.cacKs.length === n ? cLab : rng(c.cacKs[0], c.cacKs[c.cacKs.length - 1]);
+  const hot = (l, v, cly, cp, s, lyV) => `<div class="cd hot" style="min-height:0"><p class="eb">${l}</p><div class="mid" style="color:#fff">${v}</div>${big(cly, lyV || lyLab, true)}<div class="sub" style="margin-top:4px">${[cp ? small(cp, pLab) : '', s].filter(Boolean).join(' · ')}</div></div>`;
+  const yr = S.months[k1].slice(0, 4);
+  // ---- funnel by recruitment quarter (first order), the 8 quarters to the period end
+  const qEnd = k1 - ((+S.months[k1].slice(5, 7)) % 3 === 0 ? 0 : (+S.months[k1].slice(5, 7)) % 3), qs = [];
+  for (let e = qEnd; e >= 2 && qs.length < 8; e -= 3) qs.unshift(e);
+  // retention measured at the same age for every cohort: active 6 months after the first order (blank until the whole quarter is 6 months old)
+  const fRow = e => { const a = e - 2, rec = sumK(C.coh_rec, a, e), act = sumK(C.coh_act, a, e), a6 = e + 6 <= Lk ? sumK(C.coh_a6, a, e) : null, sp = spendK(a, e);
+    return { e, lab: rng(a, e), rec, act, a6, conv: rec ? act / rec : null, keep: (act && a6 != null) ? a6 / act : null, sp, cpa: (sp != null && act) ? sp / act : null, cpr: (sp != null && rec) ? sp / rec : null }; };
+  const fr = qs.map(fRow), fLast = fr[fr.length - 1], fLy = fr.length > 4 ? fr[fr.length - 5] : null;
+  const fTbl = `<table class="fun" style="width:100%;border-collapse:collapse"><thead><tr><th>Recruited in</th><th>Recruited</th><th>Recruits who reached active</th><th>Conversion</th><th>Still active 6 months on</th><th>Creator spend</th><th>Spend per recruit</th><th>Spend per recruit who reached active</th></tr></thead><tbody>${fr.map(r => `<tr><td>${r.lab}</td><td>${vN(r.rec)}</td><td>${vN(r.act)}</td><td>${vP(r.conv)}</td><td>${r.keep == null ? '<span class="sm">too early</span>' : vP(r.keep) + ' <span class="sm">(' + vN(r.a6) + ')</span>'}</td><td>${r.sp == null ? '—' : vM(r.sp)}</td><td>${r.cpr == null ? '—' : vM(r.cpr)}</td><td>${r.cpa == null ? '—' : vM(r.cpa)}</td></tr>`).join('')}</tbody></table>`;
+  // ---- takeaway line
+  const actChg = ly && ly.active ? c.active / ly.active - 1 : null, recChg = ly && ly.rec ? c.rec / ly.rec - 1 : null, convNow = c.rec ? c.newA / c.rec : null;
+  const fCur = fr.find(r => r.e === k1 && k1 - k0 === 2), fPrev = fCur ? fr.find(r => r.e === k1 - 12) : null;
+  const take = [`${vN(c.active)} active creators at ${lab(k1)}` + (actChg != null ? `, ${actChg >= 0 ? 'up' : 'down'} ${vP(Math.abs(actChg))} on a year ago` : '') + '.',
+    recChg != null ? `${recChg < -0.1 ? 'Recruitment is the issue: w' : 'W'}e recruited ${vN(c.rec)} creators in ${cLab}, ${recChg >= 0 ? 'up' : 'down'} ${vP(Math.abs(recChg))} on ${lyLab}` + (fCur && fPrev ? `, and ${vP(fCur.conv)} of them reached the active bar (${vP(fPrev.conv)} a year earlier).` : '.') : `We recruited ${vN(c.rec)} creators in ${cLab}.`,
+    `The top 10 creators deliver ${vP(c.top10)} of net orders.`].join(' ');
+  // ---- named lists
+  const rows = CL.map(x => { const a = sumA(x.o.slice(k0, k1 + 1)), b = pk0 >= 0 ? sumA(x.o.slice(pk0, pk1 + 1)) : null, l = ly0 >= 0 ? sumA(x.o.slice(ly0, ly1 + 1)) : null, ad = x.ads ? sumA(x.ads.slice(k0, k1 + 1)) : null;
+    const fo = x.o.findIndex(v => v >= 1), s = x.st[k1] || '.', mj = x.mj[k1] === '1';
+    return { x, a, b, l, ad, opa: ad ? a / ad : null, ten: fo >= 0 ? k1 - fo + 1 : null, fo, mj, stat: mj ? 'Major' : ({ A: 'Active', N: 'New', R: 'Back', C: 'Churned', E: 'Emerging' })[s] || '—' }; });
+  const name = r => esc(r.x.h || ('ID ' + r.x.id));
+  const pc = (a, b) => (b == null || b < 30) ? (a > 0 ? (b ? 'from ' + fmt.int(b) : 'new') : '—') : (a / b >= 10 ? '×' + Math.round(a / b) : ((a / b - 1) >= 0 ? '+' : '−') + Math.abs((a / b - 1) * 100).toFixed(0) + '%'), pcCls = (a, b) => (!b || b < 30 ? '' : a >= b ? 'pos' : 'neg');
+  const tenTxt = r => r.ten == null ? '—' : (r.fo === 0 ? '24+ mo' : r.ten + ' mo');
+  const relyRow = r => `<tr><td>${name(r)}${r.b >= 30 && r.a <= r.b * 0.7 ? ' <span class="tg w">down 30%+</span>' : ''}${!r.mj ? ' <span class="tg">not Major</span>' : ''}</td><td>${fmt.int(r.a)}</td><td>${c.orders ? vP(r.a / c.orders, 1) : '—'}</td><td class="${pcCls(r.a, r.b)}">${pc(r.a, r.b)}</td><td>${r.ad == null ? '—' : fmt.int(r.ad)}</td></tr>`;
+  const riseRow = r => `<tr><td>${name(r)}</td><td style="text-align:left">${r.stat}</td><td>${fmt.int(r.a)}</td><td class="${pcCls(r.a, r.b)}">${pc(r.a, r.b)}</td><td>${r.ad == null ? '—' : fmt.int(r.ad)}</td><td>${tenTxt(r)}</td></tr>`;
+  const rely = rows.filter(r => r.a > 0).sort((x, y) => y.a - x.a).slice(0, 10), relySet = new Set(rely.map(r => r.x.id));
+  const minR = 50 * n, rising = rows.filter(r => !r.mj && !relySet.has(r.x.id) && r.a >= minR && (r.b == null || r.b < 30 || r.a >= r.b * 1.25) && (r.l == null || r.l < 30 || r.a >= r.l)).sort((x, y) => y.a - x.a).slice(0, 10);
+  const tbl = (head, body, empty) => body ? `<table class="fun" style="width:100%;border-collapse:collapse"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>` : `<p class="sm">${empty}</p>`;
   const lg = arr => '<div class="sm" style="display:flex;gap:14px;flex-wrap:wrap;margin-top:6px">' + arr.map(([col, t]) => `<span><i style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${col};margin-right:6px"></i>${t}</span>`).join('') + '</div>';
-  const ce = k1, cs = Math.max(0, ce - 23), ks = win(cs, ce);
-  root.innerHTML = commCss() + `<style>.cr .hot{background:var(--violet);border-color:var(--violet)}</style><div class="inv cm cr">
+  const ce = k1, cs = Math.max(0, ce - 23), ks = win(cs, ce), cacLab = c.cacKs.length === n ? cLab : rng(c.cacKs[0], c.cacKs[c.cacKs.length - 1]);
+  const adsNote = !c.adsOk ? 'counting changed May-25' : (ly && !ly.adsOk ? 'no year-on-year: counting changed May-25' : '');
+  root.innerHTML = commCss() + `<style>.cr .hot{background:var(--violet);border-color:var(--violet)}.cr .take{font:600 19px/1.4 'Inter Tight',Inter,sans-serif;margin:14px 0 4px;max-width:1040px}.cr .g3c{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}@media(max-width:900px){.cr .g3c{grid-template-columns:1fr}}</style><div class="inv cm cr" data-norename>
 <p class="eb" style="margin:0">Creators · draft</p><h1 style="margin-top:4px">Creators · ${per.label || cLab}</h1>
-<p class="lead">Period from the header. Compared with the same period last year (${lyLab}); the previous period (${pLab}) in small text. Counts are at the end of the period; flows are totals over it.</p>
-<div class="sec" style="margin-top:18px"><h2 class="st">What management tracks</h2><div class="g4">
- ${hot('Active creators · ' + lab(k1), vN(c.active), chip(c.active, g(ly, 'active'), false, 'n'), chip(c.active, g(p, 'active'), false, 'n'), vN(c.emerging) + ' emerging (below the active bar)')}
- ${hot('New active creators · ' + cLab, vN(c.newA), chip(c.newA, g(ly, 'newA'), false, 'n'), chip(c.newA, g(p, 'newA'), false, 'n'), 'cumulative ' + yr + ' to ' + lab(k1) + ': ' + vN(c.cum) + (ly ? ' (' + vN(ly.cum) + ' a year earlier)' : ''))}
- ${hot('Ads · ' + cLab, vN(c.ads), chip(c.ads, g(ly, 'ads')), chip(c.ads, g(p, 'ads')), 'closed ads, all creators')}
- ${hot('Frequency · ads per active creator a month', c.freq == null ? '—' : c.freq.toFixed(1), chip(c.freq, g(ly, 'freq')), chip(c.freq, g(p, 'freq')), 'ads ÷ active creators (incl. ads by emerging creators)')}
+<p class="take">${take}</p>
+<p class="lead" style="margin-top:4px">Compared with the same period last year (${lyLab}); the previous period (${pLab}) in small text.</p>
+<div class="sec" style="margin-top:18px"><h2 class="st">Scorecard</h2><div class="g3c">
+ ${hot('Active creators · ' + lab(k1), vN(c.active), chip(c.active, g(ly, 'active'), false, 'n'), chip(c.active, g(p, 'active'), false, 'n'), vP(c.share) + ' of the ' + vN(c.base) + ' creators with an order in the last 6 months' + (ly ? ' (' + vN(ly.base) + ' a year earlier)' : ''))}
+ ${hot('New active · ' + cLab, vN(c.newA), chip(c.newA, g(ly, 'newA'), false, 'n'), chip(c.newA, g(p, 'newA'), false, 'n'), 'creators reaching the active bar in the period, whenever recruited')}
+ ${hot('Cumulative new active · ' + yr + ' to ' + lab(k1), vN(c.cum), chip(c.cum, g(ly, 'cum'), false, 'n'), null, 'from 1 January', ly ? (+yr - 1) + ' to ' + lab(k1 - 12) : null)}
+ ${hot('Closed ads · ' + cLab, vN(c.ads), ly && ly.adsOk ? chip(c.ads, ly.ads) : null, p && p.adsOk ? chip(c.ads, p.ads) : null, adsNote)}
+ ${hot('Frequency · ads per posting creator a month', c.freq == null ? '—' : c.freq.toFixed(1), ly && ly.adsOk ? chip(c.freq, ly.freq) : null, p && p.adsOk ? chip(c.freq, p.freq) : null, c.posters == null ? 'creators who posted: from 2026' : 'about ' + vN(c.posters) + ' creators posted a closed ad each month')}
+ ${hot('Creator CAC · ' + cacLab, c.cac == null ? '—' : vM(c.cac), null, null, [ly && chip(c.cac, ly.cac, true) ? chip(c.cac, ly.cac, true).t + ' vs ' + rng(ly.cacKs[0], ly.cacKs[ly.cacKs.length - 1]) : '', p && chip(c.cac, p.cac, true) ? chip(c.cac, p.cac, true).t + ' vs ' + rng(p.cacKs[0], p.cacKs[p.cacKs.length - 1]) : ''].filter(Boolean).join(' · ') + (c.cac == null ? 'no creator spend in the CAC sheet for these months' : ' · ' + vM(c.cacSp) + ' ÷ ' + c.cacN + ' new active' + (n < 3 ? ' · last 3 months' : '')))}
+</div>
+<div class="g2c" style="margin-top:14px">
+ <div class="cd"><p class="eb">The creator pool and how much of it is active · ${rng(cs, ce)}</p><div class="chart" id="cr-c1"></div>${lg([['var(--violet)', 'Active'], ['rgba(110,90,200,.28)', 'Emerging (ordered in the last 6 months, below the bar)'], ['var(--ink)', 'Active % of the pool (right axis)']])}</div>
+ <div class="cd"><p class="eb">Joining and leaving the active bar each month</p><div class="chart" id="cr-c2"></div>${lg([['#1F8A52', 'New active + back'], ['#C0392B', 'Churned']])}</div>
 </div></div>
-<div class="sec" style="margin-top:18px"><h2 class="st">Cost and context</h2><div class="g4">
- ${tile('Creator CAC · ' + cacLab, c.cac == null ? '—' : vM(c.cac), null, null, [ly && chip(c.cac, ly.cac, true) ? chip(c.cac, ly.cac, true).t + ' vs ' + rng(ly.cacKs[0], ly.cacKs[ly.cacKs.length - 1]) : '', p && chip(c.cac, p.cac, true) ? chip(c.cac, p.cac, true).t + ' vs ' + rng(p.cacKs[0], p.cacKs[p.cacKs.length - 1]) : ''].filter(Boolean).join(' · ') + (c.cac == null ? '' : ' · ') + (c.cac == null ? 'no creator spend in the CAC sheet for these months' : vM(c.cacSp) + ' ÷ ' + c.cacN + ' new active' + (n < 3 ? ' · last 3 months (one month is too noisy)' : '')))}
- ${tile('Churned creators · ' + cLab, vN(c.churned), chip(c.churned, g(ly, 'churned'), true, 'n'), chip(c.churned, g(p, 'churned'), true, 'n'), 'net change ' + ((c.newA + c.react - c.churned) >= 0 ? '+' : '−') + vN(Math.abs(c.newA + c.react - c.churned)) + ' (new ' + vN(c.newA) + ' + back ' + vN(c.react) + ' − churned ' + vN(c.churned) + ')')}
- ${tile('Major creators · ' + lab(k1), vN(c.major), chip(c.major, g(ly, 'major'), false, 'n'), null, vP(c.majShare) + ' of net orders in the period' + (ly && ly.majShare != null ? ' (' + vP(ly.majShare) + ' a year earlier)' : ''))}
- ${tile('Net orders · ' + cLab, vN(c.orders), chip(c.orders, g(ly, 'orders')), chip(c.orders, g(p, 'orders')), (c.opa == null ? '' : c.opa.toFixed(0) + ' per active creator a month'))}
-</div></div>
-<div class="sec"><h2 class="st">Trends · ${lab(cs)}–${lab(ce)}</h2><div class="g2c">
- <div class="cd"><p class="eb">Active creators</p><div class="chart" id="cr-c1"></div>${lg([['var(--violet)', 'Active'], ['var(--ink)', 'Same month last year']])}</div>
- <div class="cd"><p class="eb">New active creators by month</p><div class="chart" id="cr-c2"></div>${lg([['var(--violet)', 'New active'], ['var(--ink)', 'Same month last year']])}</div>
- <div class="cd"><p class="eb">Cumulative new active creators · year to date</p><div class="chart" id="cr-c3"></div>${lg([['var(--violet)', yr], ['var(--ink)', String(+yr - 1)]])}</div>
- <div class="cd"><p class="eb">Ads by month</p><div class="chart" id="cr-c4"></div>${lg([['var(--violet)', 'Ads'], ['var(--ink)', 'Same month last year']])}</div>
- <div class="cd"><p class="eb">Frequency · ads per active creator</p><div class="chart" id="cr-c5"></div>${lg([['var(--violet)', 'Frequency'], ['var(--ink)', 'Same month last year']])}</div>
- <div class="cd"><p class="eb">Creator CAC by month</p><div class="chart" id="cr-c6"></div>${lg([['var(--violet)', 'Creator CAC']])}<div class="sm">Creator spend from the CAC sheet ÷ new active creators that month. Months with no new active creators show no bar.</div></div>
-</div></div>
+<div class="sec"><h2 class="st">Creator funnel · where we lose them</h2><div class="cd">${fTbl}
+<div class="sm" style="margin-top:8px">Creators grouped by the quarter of their first order. Recruits who reached active = met the active bar at any point since (this differs from the scorecard's new active, which counts creators reaching the bar in the period whenever they were recruited). Still active 6 months on = share of those that were above the bar 6 months after their first order, the same age for every quarter. Spend = that quarter's creator spend (CAC sheet, from Oct-25); it may include managing existing creators, so the spend figures are an upper bound on acquisition cost.${fLy && fLast ? ` ${fLast.lab}: ${vN(fLast.rec)} recruited (${fLy.lab}: ${vN(fLy.rec)}), ${vP(fLast.conv)} reached active (${vP(fLy.conv)}).` : ''}</div></div></div>
+<div class="sec"><h2 class="st">Creators we rely on · ${cLab}</h2><div class="cd">
+${tbl(`<th>Creator</th><th>Net orders</th><th>Share of orders</th><th>vs ${pLab}</th><th>Closed ads</th>`, rely.map(relyRow).join(''), 'No orders in the period.')}
+<div class="sm" style="margin-top:8px">The 10 creators with the most net orders in the period: ${vP(c.top10)} of all net orders. Flagged when down 30% or more vs the previous period. Closed ads are shown for context only: orders come from links and codes that outlive an ad, so orders per ad is not a reliable measure.</div></div></div>
+<div class="sec"><h2 class="st">Creators on the way up · could be the next ones we rely on</h2><div class="cd">
+${tbl(`<th>Creator</th><th style="text-align:left">Status</th><th>Net orders · ${cLab}</th><th>vs ${pLab}</th><th>Closed ads</th><th>Since first order</th>`, rising.map(riseRow).join(''), 'None meet the test this period.')}
+<div class="sm" style="margin-top:8px">Not Major and not in the top 10; at least ${fmt.int(minR)} net orders in ${cLab} (50 a month), up 25% or more on ${pLab} and not down on ${lyLab}. Ranked by net orders.</div></div></div>
 <details><summary>Definitions</summary><dl>
 <dt>Active creator</dt><dd>Averages 5+ net orders a month (over the last 12 months, or since the first order if newer) and has had an order in the last 6 months.</dd>
-<dt>New active</dt><dd>A creator reaching the active bar for the first time that month. Cumulative new active counts them from 1 January.</dd>
-<dt>Emerging</dt><dd>Had an order in the last 6 months but below the active bar.</dd>
-<dt>Churned / back</dt><dd>Churned = an active creator that fell below the bar that month. Back = a former active creator that returned to it.</dd>
+<dt>Base</dt><dd>Creators with at least one order in the last 6 months: active plus emerging (below the active bar). Creators who signed up but never ordered are not in the data.</dd>
+<dt>New active / back / churned</dt><dd>New active = reached the active bar for the first time that month (cumulative counts from 1 January). Back = a former active creator that returned to it. Churned = an active creator that fell below it.</dd>
+<dt>Recruited</dt><dd>A creator's first month with an order. Creators already ordering in Jan-24 (the start of the data) are counted in Jan-24.</dd>
 <dt>Major</dt><dd>Around 5,000+ net orders a year (drops out below 2,500).</dd>
-<dt>Ads and frequency</dt><dd>Closed ads in the month, all creators. Frequency = ads ÷ active creators; it includes ads by emerging creators, so it slightly overstates activity per active creator until ads by creator are available.</dd>
-<dt>Creator CAC</dt><dd>Creator acquisition spend from the CAC sheet (freelancer salaries, tools) ÷ new active creators. Spend is available from Oct-25.</dd>
+<dt>Ads and frequency</dt><dd>Closed ads in the month. Frequency = closed ads ÷ creators who posted at least one closed ad (data pack's ads by creator, 2026). The way closed ads were counted changed in May-25, so ads are not compared with periods before Jun-25.</dd>
+<dt>Creator CAC</dt><dd>Creator acquisition spend from the CAC sheet (freelancer salaries, tools) ÷ new active creators. Spend starts Oct-25.</dd>
+<dt>Creator lists</dt><dd>Creators with at least 100 net orders in the last 24 months, by handle. Status at the end of the period.</dd>
 </dl></details></div>`;
   try {
-    const labs = ks.map(lab), full = ks.map(k => fmt.monthLong(S.months[k])), lyV = arr => ks.map(k => k >= 12 ? arr[k - 12] : null);
-    const bar = (id, arr, kind) => barChart(document.getElementById(id), { labels: labs, fullLabels: full, kind: kind || 'num', stacked: false, height: 200, labelEvery: 2, series: [{ name: 'This year', color: 'var(--violet)', values: ks.map(k => arr[k]) }], lines: [{ name: 'Same month last year', color: 'var(--ink)', values: lyV(arr) }] });
-    bar('cr-c1', C.active); bar('cr-c2', C.first_active); bar('cr-c4', ads);
-    const cum = y => { const k0y = mtMonthK(y + '-01'); let r = 0; return win(0, 11).map(i => { const k = k0y + i; if (k0y < 0 || k > Lk) return null; r += C.first_active[k] || 0; return r; }); };
-    lineChart(document.getElementById('cr-c3'), { labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], kind: 'num', height: 200, labelEvery: 1, minVal: 0, series: [{ name: yr, color: 'var(--violet)', values: cum(+yr) }, { name: String(+yr - 1), color: 'var(--ink)', values: cum(+yr - 1) }] });
-    const fq = ks.map(k => C.active[k] ? (ads[k] || 0) / C.active[k] : null), fqL = ks.map(k => k >= 12 && C.active[k - 12] ? (ads[k - 12] || 0) / C.active[k - 12] : null);
-    lineChart(document.getElementById('cr-c5'), { labels: labs, fullLabels: full, kind: 'num', height: 200, labelEvery: 2, minVal: 0, series: [{ name: 'Frequency', color: 'var(--violet)', values: fq }, { name: 'Same month last year', color: 'var(--ink)', values: fqL }] });
-    barChart(document.getElementById('cr-c6'), { labels: labs, fullLabels: full, kind: 'money', stacked: false, height: 200, labelEvery: 2, series: [{ name: 'Creator CAC', color: 'var(--violet)', values: ks.map(k => { const s = csp(k), nn = C.first_active[k]; return (s != null && nn) ? s / nn : null; }) }] });
+    const labs = ks.map(lab), full = ks.map(k => fmt.monthLong(S.months[k]));
+    // stacked pool (active + emerging) with active as % of the pool on the right axis (line scaled to the left axis)
+    const pool = ks.map(base), shr = ks.map(k => base(k) ? C.active[k] / base(k) : null), lmx = niceMax(Math.max(...pool)), rmx = Math.max(0.1, Math.ceil(Math.max(...shr.filter(v => v != null)) * 10 + 1) / 10);
+    barChart(document.getElementById('cr-c1'), { labels: labs, fullLabels: full, kind: 'num', stacked: true, height: 200, labelEvery: 2, right: { min: 0, max: rmx, kind: 'pct', color: 'var(--ink)' },
+      series: [{ name: 'Active', color: 'var(--violet)', values: ks.map(k => C.active[k]) }, { name: 'Emerging', color: 'rgba(110,90,200,.28)', values: ks.map(k => C.emerging[k]) }],
+      lines: [{ name: 'Active % of pool', color: 'var(--ink)', values: shr.map(v => v == null ? null : v / rmx * lmx) }],
+      tip: i => `<div class="t">${full[i]}</div><div class="r">Active <b>${vN(C.active[ks[i]])}</b></div><div class="r">Emerging <b>${vN(C.emerging[ks[i]])}</b></div><div class="r">Pool <b>${vN(pool[i])}</b></div><div class="r">Active % of pool <b>${vP(shr[i])}</b></div>` });
+    barChart(document.getElementById('cr-c2'), { labels: labs, fullLabels: full, kind: 'num', stacked: true, height: 200, labelEvery: 2, ticks: 3, series: [{ name: 'New active + back', color: '#1F8A52', values: ks.map(k => (C.first_active[k] || 0) + (C.react[k] || 0)) }, { name: 'Churned', color: '#C0392B', values: ks.map(k => -(C.churned[k] || 0)) }] });
   } catch (e) { console.error(e); }
 }
 
@@ -2136,8 +2173,8 @@ function renderKpis() {
         <div class="muted small">${addbackActive() || !M.control.ounass.provisional_months.some(m => !state.confirmed.has(m)) ? 'Buffer added back. If switched to \'held\', ARR will be below the Investor Dashboard.' : 'Buffer held: ARR is below the Investor Dashboard, which adds it back.'}</div>
         ${split2('Commission run-rate', fmt.money(arr.legacy), 'ROAS ARR', fmt.money(arr.roas))}</div>
       <div class="card block"><p class="eyebrow">ARPA · ROAS · ${fmt.month(Em)}</p><div class="hero">${fmt.money(AR.ROAS)}</div>
-        <div class="muted small">ROAS ARR ${fmt.money(AR.arr ? AR.arr.ROAS : null)} ÷ ${fmt.num(AR.n ? AR.n.ROAS : null, 0)} brands that paid at least $250 in ${AR.ks ? fmt.month(AR.ks[0]) + '–' + fmt.month(AR.ks[AR.ks.length - 1]) : ''}. No blended or Commission ARPA: one client is over half of Commission revenue, so an average misleads (see the Commission page).</div></div>
-      ${(() => { const kE = mtMonthK(Em), n3 = commModel().nrrAt(kE); return card('Commission NRR · ' + (kE >= 2 ? fmt.month(S.months[kE - 2]) + '–' + fmt.month(Em) : fmt.month(Em)) + ' vs a year earlier', fmt.pct(n3 && n3.nrr, 0), '<div class="muted small">GRR ' + fmt.pct(n3 && n3.grr, 0) + ' · same definition as the Commission page · rolling 12 months: ' + fmt.pct(nrr && nrr.nrr, 0) + '</div>'); })()}
+        <div class="muted small">ROAS ARR ${fmt.money(AR.arr ? AR.arr.ROAS : null)} ÷ ${fmt.num(AR.n ? AR.n.ROAS : null, 0)} brands that paid at least $250 in ${AR.ks ? mtRangeLab(S.months.indexOf(AR.ks[0]), S.months.indexOf(AR.ks[AR.ks.length - 1])) : ''}. No blended or Commission ARPA: one client is over half of Commission revenue, so an average misleads (see the Commission page).</div></div>
+      ${(() => { const kE = mtMonthK(Em), n3 = commModel().nrrAt(kE); return card('Commission NRR · ' + (kE >= 2 ? mtRangeLab(kE - 2, kE) : fmt.month(Em)) + ' vs a year earlier', fmt.pct(n3 && n3.nrr, 0), '<div class="muted small">GRR ' + fmt.pct(n3 && n3.grr, 0) + ' · same definition as the Commission page · rolling 12 months: ' + fmt.pct(nrr && nrr.nrr, 0) + '</div>'); })()}
     </div>
     <div class="grid g4" style="margin-top:14px">
       ${card('LTV · ROAS', fmt.money(I.nmLtv), '<div class="muted small">ARPA × 50% ÷ annualised logo churn ' + fmt.pct(I.nmLogoChurn, 0) + '</div>')}

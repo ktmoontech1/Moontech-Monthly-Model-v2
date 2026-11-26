@@ -282,6 +282,33 @@ def load_creators(kit, cfg):
     orders.rounded = rounded
     return orders, unatt, flags
 
+# ----------------------------------------------------------------------------- creator handles + closed ads per creator (V2 2026-11-26, Creators page lists)
+def creator_handles_ads():
+    """Handle (latest 'Contact' seen) per Contact ID from orders_by_creator.xlsx, and closed ads per Contact ID per month (2026) from
+    ads_by_creator.xlsx. Read for the Creators page lists only; nothing in the engine uses them."""
+    def cid(i):
+        if i in (None, '', 0, '0'): return None
+        i = str(i).strip()
+        if re.fullmatch(r'\d+\.0', i): i = i[:-2]
+        return i if i.isdigit() else None
+    names, ads = {}, {}
+    rows = _rows(os.path.join(PACK, 'orders_by_creator.xlsx'), 'Export'); h = rows[0]; ix = {str(h[i]).strip(): i for i in range(len(h)) if h[i] is not None}
+    for r in rows[1:]:
+        i = cid(_g(r, ix['Contact ID'])); n = _g(r, ix.get('Contact', -1)) if 'Contact' in ix else None
+        if i and n and str(n).strip(): names[i] = str(n).strip()
+    ap = os.path.join(PACK, 'ads_by_creator.xlsx')
+    if os.path.exists(ap):
+        rows = _rows(ap, 'Export'); h = rows[0]; ix = {str(h[i]).strip(): i for i in range(len(h)) if h[i] is not None}
+        for r in rows[1:]:
+            ym = _ym(_g(r, ix['Month']))
+            if not ym or ym[0] != 2026 or ym[1] not in K26: continue
+            i = cid(_g(r, ix['Contact ID'])); v = _num(_g(r, ix['Closed Ads']))
+            if not i or not v: continue
+            ads.setdefault(i, [0] * NF)[K26[ym[1]]] += int(v)
+            n = _g(r, ix.get('Contact', -1)) if 'Contact' in ix else None
+            if n and str(n).strip() and i not in names: names[i] = str(n).strip()
+    return names, ads
+
 # ----------------------------------------------------------------------------- CAC spend (USD per month) — from baked history
 def load_cac(kit, cfg):
     H = hist()

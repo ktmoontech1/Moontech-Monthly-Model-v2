@@ -330,8 +330,28 @@ def build_dataset(E, ctl):
             if s == 'Churned': cr['churned'][k] += 1
             cr['orders_total'][k] += x[k]
     for k in range(NF): cr['orders_unatt'][k] = E.unatt[k]; cr['orders_total'][k] += E.unatt[k]
+    # V2 2026-11-26 (Kareem): creator funnel by recruitment month (first order): how many reached the active bar, how many are active at the update month, months to active
+    cr['coh_rec'] = [0] * NF; cr['coh_act'] = [0] * NF; cr['coh_now'] = [0] * NF; cr['coh_mta'] = [0] * NF; cr['coh_a6'] = [0] * NF   # coh_a6: recruits that reached active and are active 6 months after their first order
+    for i, x in E.orders.items():
+        fo = first_order[i]
+        if fo is None: continue
+        cr['coh_rec'][fo] += 1
+        fa = first_active[i]
+        if fa is not None and fa >= fo: cr['coh_act'][fo] += 1; cr['coh_mta'][fo] += fa - fo
+        if E.cst[i][NF - 1] in ACT: cr['coh_now'][fo] += 1
+        if fa is not None and fa >= fo and fo + 6 <= NF - 1 and E.cst[i][fo + 6] in ACT: cr['coh_a6'][fo] += 1
     if PACK: pack_loaders.patch_creator_series(cr)      # status history from baked build; 2026 orders from pack
     S['creators'] = cr
+    # V2 2026-11-26 (Kareem): per-creator list for the Creators page (top creators, fastest growing, top creators slipping); handles shown
+    creator_list = []
+    if PACK:
+        cnames, cads = pack_loaders.creator_handles_ads()
+        SC = {'New': 'N', 'Existing': 'A', 'Reactivated': 'R', 'Churned': 'C', 'Emerging': 'E'}
+        cr['posters'] = [sum(1 for v in cads.values() if v[k] > 0) if any(v[k] for v in cads.values()) else None for k in range(NF)]   # creators with 1+ closed ad (2026 only)
+        for i, x in E.orders.items():
+            if sum(x[max(0, NF - 24):NF]) < 100: continue            # creators with at least 100 net orders in the last 24 months
+            creator_list.append({'id': i, 'h': cnames.get(i), 'o': [round(v, 1) for v in x[:NF]], 'st': ''.join(SC.get(E.cst[i][k], '.') for k in range(NF)),
+                                 'mj': ''.join('1' if E.major[i][k] else '0' for k in range(NF)), 'ads': cads.get(i)})
 
     # ---- period metrics
     def nrr(series, p0, p1):
@@ -588,7 +608,7 @@ def build_dataset(E, ctl):
                          'last_paid': (lambda lp: mo(lp) if lp is not None else None)(max([k for k in range(L + 1) if v['pay'][k] > 0], default=None)),
                          'monthly': v['pay'][:NM], 'status_monthly': E.rst[b][:NM]})
     return {'series': S, 'periods': periods, 'annualised': ann, 'cohorts': {'roas': roas_cohorts, 'legacy': leg_cohorts},
-            'merchants': merchants, 'roas_brands': roas_tbl, 'weights': E.w,
+            'merchants': merchants, 'roas_brands': roas_tbl, 'weights': E.w, 'creator_list': creator_list,
             'review': {'new_names': E.review, 'creator_id_flags': E.id_flags, 'r2_churned': [b for b in brands if E.lad[b]['churn'] is None and any(E.rst[b][k] == 'Churned' for k in range(NM))],
                        'low_confidence': [m for m, v in E.master.items() if v.get('status') != 'Confirmed']}}
 
