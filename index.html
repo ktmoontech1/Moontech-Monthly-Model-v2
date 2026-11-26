@@ -867,16 +867,21 @@ function arpaAt(k, cacSL) {   // ARPA = ARR ÷ customers that paid >= arpa.min_p
   return o;
 }
 
-function mtInvExportBind() {   // standalone, name-free investor page from the rendered tab (agreed 18 Nov 2026, option 1)
-  const b = document.getElementById('inv-dl'); if (!b) return;
-  b.onclick = () => { const src = document.getElementById('inv-export'); if (!src) return;
-    const node = src.cloneNode(true); node.querySelectorAll('[data-noexport]').forEach(x => x.remove());
-    const css = [...document.querySelectorAll('style')].map(s => s.outerHTML).join('\n'), logo = (document.querySelector('svg.logo') || {}).outerHTML || '';
+function mtInvExportBind() {   // standalone, name-free investor page from the rendered tab (agreed 18 Nov 2026, option 1); PDF button added 26 Nov (browser print to an A4 PDF)
+  const build = forPrint => { const src = document.getElementById('inv-export'); if (!src) return null;
+    const node = src.cloneNode(true); node.querySelectorAll('[data-noexport]').forEach(x => x.remove()); if (forPrint) node.querySelectorAll('details').forEach(d => d.setAttribute('open', ''));
+    const css = [...document.querySelectorAll('style')].map(s => s.outerHTML).join('\n') + MT_INV_PRINT_CSS, logo = (document.querySelector('svg.logo') || {}).outerHTML || '';
     const html = '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>MoonTech · Investor update · ' + esc(fmt.monthLong(M.latest_month)) + '</title>'
       + '<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700&display=swap" rel="stylesheet">' + css
       + '<style>body{margin:0;background:var(--paper);color:var(--ink);font-family:Inter,system-ui,sans-serif}.wrapx{max-width:1180px;margin:0 auto;padding:28px 32px 48px}.hdx{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--rule);padding-bottom:18px;margin-bottom:22px}.hdx .logo{height:34px;width:auto;color:var(--ink)}</style></head><body><div class="wrapx"><div class="hdx">' + logo + '</div>' + node.outerHTML + '</div></body></html>';
+    return forPrint ? html.replace('</body>', '<script>window.addEventListener("load",()=>setTimeout(()=>window.print(),900));<\/script></body>') : html; };
+  const b = document.getElementById('inv-dl'); if (b) b.onclick = () => { const html = build(false); if (!html) return;
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([html], { type: 'text/html' })); a.download = 'moontech-investor-update-' + M.latest_month + '.html'; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); };
+  const bp = document.getElementById('inv-pdf'); if (bp) bp.onclick = () => { const html = build(true); if (!html) return;
+    const w = window.open(URL.createObjectURL(new Blob([html], { type: 'text/html' })), '_blank'); if (!w) alert('Allow pop-ups for this page to save the PDF.'); };
 }
+// A4 print layout for the investor page: page at 1180px scaled to A4 width, cards and sections kept whole, colours printed
+const MT_INV_PRINT_CSS = '<style>@page{size:A4;margin:10mm}@media print{html,body{background:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.wrapx{width:1180px;max-width:none;zoom:.6;padding:0}.cd,.pt tr,.g4>*,.plan,details,.hot,svg{break-inside:avoid;page-break-inside:avoid}h1,h2,.st,.eb{break-after:avoid;page-break-after:avoid}.sec{break-inside:auto}.inv .g4{grid-template-columns:repeat(4,minmax(0,1fr))!important}.inv .g3,.inv .steps{grid-template-columns:repeat(3,minmax(0,1fr))!important}.inv dl{grid-template-columns:220px 1fr!important}}</style>';
 
 /* ============================================================ HeyMoon.ai metrics: one calculation for the Investor tab and the HeyMoon.ai page (25 Nov 2026) */
 function hmModel(I) {
@@ -1148,7 +1153,7 @@ function renderInvestor() {
 </tbody></table>
 <div class="sm" style="margin-top:10px">Acquisition spend of ${vM(cumSpend)} over ${path[0].y}–${P5.y}: the first year from this round, later years from gross profit and further funding. Management plan, not a forecast. Unit economics are early indicators from samples of 8–${c.p1Pool} brands.</div></div></div>`;
   const invHTML = invCss + `<div class="inv" id="inv-export">
-<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px"><p class="eb" style="margin:0">Investor update · ${mL}</p><button class="btn" id="inv-dl" type="button" data-noexport>Download investor page</button></div>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px"><p class="eb" style="margin:0">Investor update · ${mL}</p><span data-noexport style="display:flex;gap:8px"><button class="btn" id="inv-dl" type="button">Download investor page</button><button class="btn" id="inv-pdf" type="button">Save as PDF</button></span></div>
 <h1>HeyMoon.ai ARR up ${arrGq != null ? Math.round(arrGq * 100) + '%' : '—'} quarter on quarter; brands that scale past Phase 1 spend ${scaledAvg ? (scaledAvg / phase1).toFixed(1) + '×' : '—'} their first campaign.</h1>
 <p class="lead">HeyMoon.ai is MoonTech's outcome-priced AI agent for creator marketing, launched in January 2026. Brands start with one $1,000 campaign and scale on guaranteed results. The established Commission business funds the build.</p>
 <div class="g4">
